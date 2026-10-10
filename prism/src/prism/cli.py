@@ -56,10 +56,14 @@ def _print_predictions(predictions, output_format, trace_id=None):
 def main(argv=None) -> None:
     args = parser().parse_args(argv)
     if args.command == "predict":
-        from . import tracing
+        from . import entire, tracing
         from .pipeline import predict
         from .github_context import build_context
 
+        try:
+            entire.ensure_ready(args.repo)
+        except RuntimeError as error:
+            raise SystemExit(str(error)) from None
         tracing.init()
         try:
             with tracing.workflow("issue-to-files") as span:

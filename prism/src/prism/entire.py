@@ -9,6 +9,42 @@ from functools import lru_cache
 from .types import Hit
 
 
+def ensure_ready(repo: str) -> None:
+    """Fail before model calls unless Entire reports a ready repository."""
+    view_ref = f"/{repo}" if repo.startswith(("gh/", "et/")) else repo
+    try:
+        result = subprocess.run(
+            ["entire", "repo", "view", view_ref, "--json"],
+            capture_output=True,
+            text=True,
+            timeout=45,
+        )
+    except FileNotFoundError:
+        raise RuntimeError("Entire CLI is not installed or is not on PATH") from None
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip() or "Entire repository check failed"
+        raise RuntimeError(
+            f"Cannot use Entire repository {repo}: {detail}. Authenticate with `entire login` or set ENTIRE_TOKEN."
+        )
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        raise RuntimeError(f"Entire returned invalid repository status for {repo}") from None
+
+    statuses = []
+    pending = [payload]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            statuses.extend(item for key, item in value.items() if key.lower() == "status" and isinstance(item, str))
+            pending.extend(value.values())
+        elif isinstance(value, list):
+            pending.extend(value)
+    if not any(status.lower() == "ready" for status in statuses):
+        shown = ", ".join(sorted(set(statuses))) or "unknown"
+        raise RuntimeError(f"Entire repository {repo} is not ready (status: {shown})")
+
+
 def _hits(payload: dict) -> list[Hit]:
     return [
         Hit(path=item["path"], line=item["line"], text=item["context_line"])
