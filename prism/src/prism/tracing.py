@@ -11,15 +11,19 @@ def _noop_span():
     yield None
 
 
+def logs_to_stderr():
+    """Import Neatlogs with its logging moved off stdout, where it would corrupt JSON and markdown output."""
+    import neatlogs
+    for handler in logging.getLogger("neatlogs").handlers:
+        if getattr(handler, "stream", None) in (sys.stdout, sys.__stdout__):
+            handler.setStream(sys.stderr)
+    return neatlogs
+
+
 def _sdk():
     if not os.getenv("NEATLOGS_API_KEY"):
         return None
-    import neatlogs
-    # Neatlogs logs to stdout, which would corrupt JSON and markdown output.
-    for handler in logging.getLogger("neatlogs").handlers:
-        if getattr(handler, "stream", None) is sys.stdout:
-            handler.setStream(sys.stderr)
-    return neatlogs
+    return logs_to_stderr()
 
 
 def init():
