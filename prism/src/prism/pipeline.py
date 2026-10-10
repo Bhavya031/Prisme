@@ -141,16 +141,19 @@ async def predict(ctx: Context, provider: str, *, max_cost_usd: float | None = N
               "max_extra_rounds": max_extra, "timeout_seconds": timeout_seconds}
     usages: list[Usage] = []
     run = _predict(ctx, provider, limits, usages)
+    deadline = asyncio.timeout(timeout_seconds)
     try:
-        if timeout_seconds is None:
+        async with deadline:
             return await run
-        return await asyncio.wait_for(run, timeout=timeout_seconds)
     except BudgetStop:
         raise
     except models.Truncated as error:
         usages.append(error.usage)
         raise BudgetStop(f"{error}; no prediction made", _spent(provider, usages, limits, "max_output_tokens")) from None
     except TimeoutError:
+        # A network read timeout inside the pipeline is not the prediction deadline.
+        if not deadline.expired():
+            raise
         # The call cut off mid-flight reported no usage and may still be billed.
         raise BudgetStop(f"Prediction timed out after {timeout_seconds:g}s with {len(usages)} model call(s) finished; "
                          "a call in flight may still be billed", _spent(provider, usages, limits, "timeout_seconds")) from None

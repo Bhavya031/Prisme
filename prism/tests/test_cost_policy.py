@@ -301,6 +301,13 @@ class BudgetTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must be positive"):
                 self.predict(**budget)
 
+    def test_network_timeout_inside_the_pipeline_is_not_the_prediction_deadline(self):
+        github_context.fetch_reference.side_effect = TimeoutError("The read operation timed out")
+        for budget in ({}, {"timeout_seconds": 30}):
+            with self.assertRaisesRegex(TimeoutError, "read operation timed out") as raised:
+                self.predict(**budget)
+            self.assertNotIsInstance(raised.exception, pipeline.BudgetStop)
+
     def test_truncated_call_reports_everything_billed_so_far(self):
         usage = Usage(input=500, output=300, cached_input=0, cache_write=0, reasoning=None)
         original = models.call.side_effect
