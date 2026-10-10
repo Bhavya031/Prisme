@@ -38,6 +38,7 @@ class ContextTests(unittest.TestCase):
                 "repos/o/r/issues/1": {"state": "closed", "title": "See #42\nSee #7\nSee #8", "body": ""},
                 "repos/o/r/pulls/42": {"merged_at": "x", "created_at": "2020-01-02T00:00:00Z", "merge_commit_sha": "merge"},
                 "repos/o/r/commits/merge": {"parents": [{"sha": before}]},
+                "repos/fork/repo": {"default_branch": "main"},
                 "repos/fork/repo/commits/main": {"sha": before},
                 f"repos/o/r/git/trees/{before}?recursive=1": {"tree": [{"path": "src/a.py", "type": "blob"}]},
                 "repos/o/r/issues/1/comments?per_page=100&page=1": [],
@@ -54,6 +55,28 @@ class ContextTests(unittest.TestCase):
             )
         self.assertEqual(ctx.safe_refs, {("o", "r", 7)})
         self.assertEqual([reference["reference"] for reference in ctx.bundle.references], ["o/r#7"])
+
+    def test_benchmark_fork_is_checked_on_its_default_branch(self):
+        before = "a" * 40
+
+        def api(path):
+            values = {
+                "repos/o/r/issues/1": {"state": "closed", "title": "bug", "body": ""},
+                "repos/o/r/pulls/42": {"merged_at": "x", "created_at": "2020-01-02T00:00:00Z", "merge_commit_sha": "merge"},
+                "repos/o/r/commits/merge": {"parents": [{"sha": before}]},
+                "repos/fork/repo": {"default_branch": "master"},
+                "repos/fork/repo/commits/master": {"sha": before},
+                f"repos/o/r/git/trees/{before}?recursive=1": {"tree": [{"path": "src/a.py", "type": "blob"}]},
+                "repos/o/r/issues/1/comments?per_page=100&page=1": [],
+            }
+            return values[path]
+
+        with mock.patch.object(github_context, "api_v2", side_effect=api):
+            ctx = github_context.build_context(
+                "https://github.com/o/r/issues/1", entire_repo="gh/fork/repo",
+                pr_url="https://github.com/o/r/pull/42", pre_merge_sha=before,
+            )
+        self.assertEqual(ctx.known_paths, {"src/a.py"})
 
     def test_fetch_reference_rejects_unsafe_refs_and_honors_cutoff(self):
         ctx = Context(Bundle({}, [], [], {}), set(), {("o", "r", 7)}, "2020-01-02T00:00:00Z", 42, "gh/o/r")
