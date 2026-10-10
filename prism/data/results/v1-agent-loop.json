@@ -1,0 +1,373 @@
+{
+ "run_date": "2026-10-10",
+ "script": "entire_compare.py",
+ "settings": {
+  "claude": {
+   "sdk": "claude-agent-sdk",
+   "model": "sonnet",
+   "effort": "medium",
+   "max_turns": 6,
+   "tools": [
+    "entire_code_search"
+   ]
+  },
+  "openai": {
+   "sdk": "openai-agents",
+   "model": "gpt-6-sol",
+   "reasoning_effort": "medium",
+   "max_tokens": 1000,
+   "max_turns": 6,
+   "tools": [
+    "entire_code_search"
+   ]
+  },
+  "parallel": true,
+  "prompt_contains": "closed issue title and body only"
+ },
+ "cost_notes": {
+  "claude.recorded_cost_usd": "total_cost_usd reported by the Claude Agent SDK, also sent to Neatlogs as neatlogs.agent.cost_usd",
+  "openai.estimated_cost_usd": "computed from OpenAI standard list prices for gpt-6-sol: $2/M uncached input, $0.20/M cached input, $10/M output; not a billed amount"
+ },
+ "summary": {
+  "claude": {
+   "exact_matches": 0,
+   "mean_precision": 0.9,
+   "mean_recall": 0.441,
+   "total_tokens": 48423,
+   "recorded_cost_usd": 0.058668
+  },
+  "openai": {
+   "exact_matches": 1,
+   "mean_precision": 0.833,
+   "mean_recall": 0.541,
+   "total_tokens": 28397,
+   "estimated_cost_usd": 0.045088
+  }
+ },
+ "cases": [
+  {
+   "case": 1,
+   "issue": "https://github.com/psf/requests/issues/6586",
+   "pr": "https://github.com/psf/requests/pull/6589",
+   "fork": "Bhavya031/requests-premerge-6589",
+   "pre_merge_sha": "3587a5f869ea7ae2ba6b20d281d810b65aa2418e",
+   "neatlogs_trace_id": "c6de5e67a4473e87c021d6ae6c0eff67",
+   "wall_seconds": 21,
+   "true_paths": [
+    "src/requests/utils.py",
+    "tests/test_requests.py"
+   ],
+   "claude": {
+    "predicted": [
+     "src/requests/utils.py",
+     "tests/test_utils.py"
+    ],
+    "missed": [
+     "tests/test_requests.py"
+    ],
+    "extra": [
+     "tests/test_utils.py"
+    ],
+    "nonexistent": [],
+    "precision": 0.5,
+    "recall": 0.5,
+    "exact_match": false,
+    "tokens": {
+     "input": 4,
+     "cache_write": 2841,
+     "cache_read": 1834,
+     "output": 191,
+     "total": 4870
+    },
+    "recorded_cost_usd": 0.0096035
+   },
+   "openai": {
+    "predicted": [
+     "src/requests/models.py",
+     "tests/test_requests.py"
+    ],
+    "missed": [
+     "src/requests/utils.py"
+    ],
+    "extra": [
+     "src/requests/models.py"
+    ],
+    "nonexistent": [],
+    "precision": 0.5,
+    "recall": 0.5,
+    "exact_match": false,
+    "tokens": {
+     "requests": 4,
+     "input": 5838,
+     "cached_input": 1694,
+     "output": 152,
+     "reasoning": 62,
+     "total": 5990
+    },
+    "estimated_cost_usd": 0.010147
+   }
+  },
+  {
+   "case": 2,
+   "issue": "https://github.com/pallets/click/issues/2971",
+   "pr": "https://github.com/pallets/click/pull/2972",
+   "fork": "Bhavya031/click-premerge-2972",
+   "pre_merge_sha": "c88f333de440c5066ff563f784a6561f4713cf78",
+   "neatlogs_trace_id": "ff4d924da5e963cf7a5fe89f18f33a4f",
+   "wall_seconds": 20,
+   "true_paths": [
+    "CHANGES.rst",
+    "src/click/core.py",
+    "tests/test_options.py"
+   ],
+   "claude": {
+    "predicted": [
+     "src/click/core.py",
+     "tests/test_options.py"
+    ],
+    "missed": [
+     "CHANGES.rst"
+    ],
+    "extra": [],
+    "nonexistent": [],
+    "precision": 1.0,
+    "recall": 0.667,
+    "exact_match": false,
+    "tokens": {
+     "input": 4,
+     "cache_write": 1406,
+     "cache_read": 2247,
+     "output": 128,
+     "total": 3785
+    },
+    "recorded_cost_usd": 0.0054452
+   },
+   "openai": {
+    "predicted": [
+     "src/click/core.py",
+     "tests/test_options.py"
+    ],
+    "missed": [
+     "CHANGES.rst"
+    ],
+    "extra": [],
+    "nonexistent": [],
+    "precision": 1.0,
+    "recall": 0.667,
+    "exact_match": false,
+    "tokens": {
+     "requests": 4,
+     "input": 4841,
+     "cached_input": 1541,
+     "output": 182,
+     "reasoning": 88,
+     "total": 5023
+    },
+    "estimated_cost_usd": 0.008728
+   }
+  },
+  {
+   "case": 3,
+   "issue": "https://github.com/pytest-dev/pytest/issues/1764",
+   "pr": "https://github.com/pytest-dev/pytest/pull/14126",
+   "fork": "Bhavya031/pytest-premerge-14126",
+   "pre_merge_sha": "2f26a02d7a12c23a42b93f2b52702e52f75a5716",
+   "neatlogs_trace_id": "eef25d44c6f8459245ca177ee63e6052",
+   "wall_seconds": 18,
+   "true_paths": [
+    "doc/en/conf.py",
+    "doc/en/deprecations.rst",
+    "pyproject.toml",
+    "src/_pytest/config/__init__.py",
+    "src/_pytest/config/argparsing.py",
+    "src/_pytest/deprecated.py",
+    "src/pytest/__main__.py",
+    "testing/test_config.py"
+   ],
+   "claude": {
+    "predicted": [
+     "src/_pytest/config/argparsing.py",
+     "testing/test_config.py"
+    ],
+    "missed": [
+     "doc/en/conf.py",
+     "doc/en/deprecations.rst",
+     "pyproject.toml",
+     "src/_pytest/config/__init__.py",
+     "src/_pytest/deprecated.py",
+     "src/pytest/__main__.py"
+    ],
+    "extra": [],
+    "nonexistent": [],
+    "precision": 1.0,
+    "recall": 0.25,
+    "exact_match": false,
+    "tokens": {
+     "input": 8,
+     "cache_write": 1969,
+     "cache_read": 6870,
+     "output": 332,
+     "total": 9179
+    },
+    "recorded_cost_usd": 0.0098273
+   },
+   "openai": {
+    "predicted": [
+     "src/_pytest/config/argparsing.py",
+     "testing/test_config.py"
+    ],
+    "missed": [
+     "doc/en/conf.py",
+     "doc/en/deprecations.rst",
+     "pyproject.toml",
+     "src/_pytest/config/__init__.py",
+     "src/_pytest/deprecated.py",
+     "src/pytest/__main__.py"
+    ],
+    "extra": [],
+    "nonexistent": [],
+    "precision": 1.0,
+    "recall": 0.25,
+    "exact_match": false,
+    "tokens": {
+     "requests": 4,
+     "input": 3540,
+     "cached_input": 0,
+     "output": 147,
+     "reasoning": 50,
+     "total": 3687
+    },
+    "estimated_cost_usd": 0.00855
+   }
+  },
+  {
+   "case": 4,
+   "issue": "https://github.com/pallets/flask/issues/5916",
+   "pr": "https://github.com/pallets/flask/pull/5917",
+   "fork": "Bhavya031/flask-premerge-5917",
+   "pre_merge_sha": "d3b78fd18a8d9e224cb9ef58a23cec9b1ffc9ce9",
+   "neatlogs_trace_id": "f5d4f391b996bf0b0eba499a98ffb8b6",
+   "wall_seconds": 19,
+   "true_paths": [
+    "CHANGES.rst",
+    "docs/config.rst",
+    "src/flask/sansio/app.py",
+    "tests/test_basic.py",
+    "tests/test_blueprints.py",
+    "tests/test_cli.py",
+    "tests/test_views.py"
+   ],
+   "claude": {
+    "predicted": [
+     "src/flask/sansio/app.py",
+     "tests/test_basic.py"
+    ],
+    "missed": [
+     "CHANGES.rst",
+     "docs/config.rst",
+     "tests/test_blueprints.py",
+     "tests/test_cli.py",
+     "tests/test_views.py"
+    ],
+    "extra": [],
+    "nonexistent": [],
+    "precision": 1.0,
+    "recall": 0.286,
+    "exact_match": false,
+    "tokens": {
+     "input": 8,
+     "cache_write": 4689,
+     "cache_read": 9498,
+     "output": 285,
+     "total": 14480
+    },
+    "recorded_cost_usd": 0.0166922
+   },
+   "openai": {
+    "predicted": [
+     "src/flask/app.py",
+     "src/flask/sansio/app.py",
+     "tests/test_basic.py"
+    ],
+    "missed": [
+     "CHANGES.rst",
+     "docs/config.rst",
+     "tests/test_blueprints.py",
+     "tests/test_cli.py",
+     "tests/test_views.py"
+    ],
+    "extra": [
+     "src/flask/app.py"
+    ],
+    "nonexistent": [],
+    "precision": 0.667,
+    "recall": 0.286,
+    "exact_match": false,
+    "tokens": {
+     "requests": 4,
+     "input": 6832,
+     "cached_input": 3737,
+     "output": 320,
+     "reasoning": 213,
+     "total": 7152
+    },
+    "estimated_cost_usd": 0.010137
+   }
+  },
+  {
+   "case": 5,
+   "issue": "https://github.com/urllib3/urllib3/issues/3636",
+   "pr": "https://github.com/urllib3/urllib3/pull/4960",
+   "fork": "Bhavya031/urllib3-premerge-4960",
+   "pre_merge_sha": "166dc208abeb9df6c8829607461381d801074195",
+   "neatlogs_trace_id": "09161a642e8a4632e608189b9b1c08af",
+   "wall_seconds": 20,
+   "true_paths": [
+    "src/urllib3/response.py",
+    "test/test_response.py"
+   ],
+   "claude": {
+    "predicted": [
+     "src/urllib3/response.py"
+    ],
+    "missed": [
+     "test/test_response.py"
+    ],
+    "extra": [],
+    "nonexistent": [],
+    "precision": 1.0,
+    "recall": 0.5,
+    "exact_match": false,
+    "tokens": {
+     "input": 8,
+     "cache_write": 3712,
+     "cache_read": 11879,
+     "output": 510,
+     "total": 16109
+    },
+    "recorded_cost_usd": 0.0171002
+   },
+   "openai": {
+    "predicted": [
+     "src/urllib3/response.py",
+     "test/test_response.py"
+    ],
+    "missed": [],
+    "extra": [],
+    "nonexistent": [],
+    "precision": 1.0,
+    "recall": 1.0,
+    "exact_match": true,
+    "tokens": {
+     "requests": 3,
+     "input": 6444,
+     "cached_input": 3540,
+     "output": 101,
+     "reasoning": 28,
+     "total": 6545
+    },
+    "estimated_cost_usd": 0.007526
+   }
+  }
+ ]
+}

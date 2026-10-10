@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prism"
+version = "0.0.0"
+description = "Predict repository files likely to change for a GitHub issue"
+requires-python = ">=3.11"
+dependencies = ["anthropic", "openai", "neatlogs"]
+
+[project.scripts]
+prism = "prism.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+prism = ["data/*.json"]
