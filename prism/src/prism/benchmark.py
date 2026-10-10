@@ -5,7 +5,7 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
-from . import github_context, pipeline, tracing
+from . import github_context, models, pipeline, tracing
 from .types import Prediction
 
 
@@ -31,30 +31,33 @@ def _trace_id(span) -> str | None:
 
 
 async def _case(case: dict) -> dict:
-    started = time.monotonic()
-    ctx = await asyncio.to_thread(
-        github_context.build_context,
-        case["issue_url"],
-        entire_repo=f"gh/{case['fork']}",
-        pr_url=case["pr_url"],
-        pre_merge_sha=case["pre_merge_sha"],
-    )
-    # Both model submissions complete before grading can fetch the fixing PR files.
-    claude, openai = await asyncio.gather(pipeline.predict(ctx, "claude"), pipeline.predict(ctx, "openai"))
-    with tracing.step("grade", "TOOL"):
-        truth = await asyncio.to_thread(github_context.true_files, case["pr_url"], ctx.known_paths)
-    if not truth:
-        raise ValueError("No modified existing files in target PR")
-    return {
-        "issue": case["issue_url"],
-        "pr": case["pr_url"],
-        "fork": case["fork"],
-        "pre_merge_sha": case["pre_merge_sha"],
-        "wall_seconds": round(time.monotonic() - started, 2),
-        "true_paths": sorted(truth),
-        "claude": _prediction_result(claude, truth),
-        "openai": _prediction_result(openai, truth),
-    }
+    try:
+        started = time.monotonic()
+        ctx = await asyncio.to_thread(
+            github_context.build_context,
+            case["issue_url"],
+            entire_repo=f"gh/{case['fork']}",
+            pr_url=case["pr_url"],
+            pre_merge_sha=case["pre_merge_sha"],
+        )
+        # Both model submissions complete before grading can fetch the fixing PR files.
+        claude, openai = await asyncio.gather(pipeline.predict(ctx, "claude"), pipeline.predict(ctx, "openai"))
+        with tracing.step("grade", "TOOL"):
+            truth = await asyncio.to_thread(github_context.true_files, case["pr_url"], ctx.known_paths)
+        if not truth:
+            raise ValueError("No modified existing files in target PR")
+        return {
+            "issue": case["issue_url"],
+            "pr": case["pr_url"],
+            "fork": case["fork"],
+            "pre_merge_sha": case["pre_merge_sha"],
+            "wall_seconds": round(time.monotonic() - started, 2),
+            "true_paths": sorted(truth),
+            "claude": _prediction_result(claude, truth),
+            "openai": _prediction_result(openai, truth),
+        }
+    finally:
+        await models.close()
 
 
 def _summary(results: list[dict]) -> dict:

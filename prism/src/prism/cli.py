@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import sys
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
@@ -58,7 +59,15 @@ def main(argv=None) -> None:
 
         ctx = build_context(args.issue_url, entire_repo=args.repo)
         providers = ("claude", "openai") if args.provider == "both" else (args.provider,)
-        predictions = asyncio.run(_predict(ctx, providers))
+        outcomes = asyncio.run(_predict(ctx, providers))
+        predictions = []
+        for provider, outcome in zip(providers, outcomes):
+            if isinstance(outcome, Exception):
+                print(f"{provider} failed: {outcome}", file=sys.stderr)
+            else:
+                predictions.append(outcome)
+        if not predictions:
+            raise SystemExit("All requested providers failed")
         _print_predictions(predictions, args.format or "text")
         return
     from .benchmark import run
@@ -70,6 +79,10 @@ def main(argv=None) -> None:
 
 
 async def _predict(ctx, providers):
+    from . import models
     from .pipeline import predict
 
-    return await asyncio.gather(*(predict(ctx, provider) for provider in providers))
+    try:
+        return await asyncio.gather(*(predict(ctx, provider) for provider in providers), return_exceptions=True)
+    finally:
+        await models.close()

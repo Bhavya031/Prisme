@@ -1,6 +1,5 @@
 import asyncio
 import json
-import re
 from collections import defaultdict
 from dataclasses import asdict
 from pathlib import Path
@@ -34,7 +33,7 @@ _DECIDE_SCHEMA = {
 
 
 def _safe_prompt(value: str, target_pr: int | None) -> str:
-    if target_pr is not None and re.search(rf"(?<!\d)#{target_pr}(?!\d)|/pull/{target_pr}(?!\d)", value, re.I):
+    if target_pr is not None and github_context._target_mention(target_pr).search(value):
         raise ValueError("Target PR reference leaked into model prompt")
     return value
 
