@@ -1,9 +1,11 @@
 import io
+import os
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from prism import cli, entire
+from prism import cli, entire, tracing
 
 
 class EntireTests(unittest.TestCase):
@@ -63,6 +65,24 @@ class EntireTests(unittest.TestCase):
              self.assertRaisesRegex(SystemExit, "Entire login required"):
             cli.main(["predict", "https://github.com/o/r/issues/1", "--repo", "gh/o/r"])
         build_context.assert_not_called()
+
+    def test_env_file_fills_only_unset_variables(self):
+        with tempfile.TemporaryDirectory() as folder, \
+             mock.patch.dict(os.environ, {"PRISM_KEPT": "shell"}):
+            path = os.path.join(folder, ".env")
+            with open(path, "w") as file:
+                file.write('# note\nexport PRISM_NEW="file"\nPRISM_KEPT=file\n')
+            cli._load_env(path)
+            self.assertEqual(os.environ["PRISM_NEW"], "file")
+            self.assertEqual(os.environ["PRISM_KEPT"], "shell")
+            del os.environ["PRISM_NEW"]
+
+    def test_tracing_step_is_a_context_manager_with_the_sdk(self):
+        sdk = mock.MagicMock()
+        with mock.patch.object(tracing, "_sdk", return_value=sdk):
+            with tracing.step("collect-context", "TOOL"):
+                pass
+        sdk.trace.assert_called_once_with("collect-context", kind="TOOL")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import os
 import sys
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
@@ -53,8 +54,20 @@ def _print_predictions(predictions, output_format, trace_id=None):
             print(path)
 
 
+def _load_env(path=".env") -> None:
+    """Fill unset variables from a .env in the working directory."""
+    if not os.path.isfile(path):
+        return
+    for line in Path(path).read_text().splitlines():
+        name, sep, value = line.partition("=")
+        name = name.strip().removeprefix("export ").strip()
+        if sep and name and not name.startswith("#"):
+            os.environ.setdefault(name, value.strip().strip("\"'"))
+
+
 def main(argv=None) -> None:
     args = parser().parse_args(argv)
+    _load_env()
     if args.command == "predict":
         from . import entire, tracing
         from .pipeline import predict
