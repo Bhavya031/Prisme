@@ -3,9 +3,11 @@
 import hashlib
 import json
 import os
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 import re
 import subprocess
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -18,6 +20,13 @@ HEADERS = {"Accept": "application/vnd.github+json", "User-Agent": "prism"}
 ISSUE_URL = re.compile(r"https://github\.com/([\w.-]+)/([\w.-]+)/issues/(\d+)")
 PR_URL = re.compile(r"https://github\.com/([\w.-]+)/([\w.-]+)/pull/(\d+)")
 _IMMUTABLE_PATH = re.compile(r"repos/[\w.-]+/[\w.-]+/(?:commits|git/trees)/[0-9a-f]{40}(?:\?recursive=1)?$")
+# Bounds applied to referenced issues and PRs only; None disables a bound.
+REFERENCE_BODY_LIMIT: int | None = 2000
+REFERENCE_COMMENT_LIMIT: int | None = 500
+REFERENCE_COMMENTS: int | None = 4
+WORKERS = 8
+_requests = threading.BoundedSemaphore(WORKERS)
+_gh_token_lock = threading.Lock()
 _gh_token_checked = False
 _gh_token: str | None = None
 
@@ -33,33 +42,63 @@ def api_v2(path: str):
     if token := _github_token():
         headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(f"https://api.github.com/{path}", headers=headers)
-    with urllib.request.urlopen(request, timeout=40) as response:
+    with _requests, urllib.request.urlopen(request, timeout=40) as response:
         data = json.load(response)
     if cacheable:
-        destination.write_text(json.dumps(data))
+        # Write-then-rename so a concurrent reader never sees a partial file.
+        partial = destination.with_name(f"{destination.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+        partial.write_text(json.dumps(data))
+        os.replace(partial, destination)
     return data
+
+
+class _Once:
+    """Fetch each path at most once per run; every caller gets the same response or the same error."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._results: dict[str, Future] = {}
+
+    def __call__(self, path: str):
+        with self._lock:
+            result = self._results.get(path)
+            first = result is None
+            if first:
+                result = self._results[path] = Future()
+        if first:
+            try:
+                result.set_result(api_v2(path))
+            except BaseException as error:
+                result.set_exception(error)
+        return result.result()
 
 
 def _github_token() -> str | None:
     global _gh_token_checked, _gh_token
     if token := os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN"):
         return token
-    if _gh_token_checked:
+    with _gh_token_lock:
+        if _gh_token_checked:
+            return _gh_token
+        try:
+            result = subprocess.run(["gh", "auth", "token"], text=True, capture_output=True, timeout=10)
+        except FileNotFoundError:
+            return None
+        finally:
+            _gh_token_checked = True
+        if result.returncode == 0:
+            _gh_token = result.stdout.strip()
         return _gh_token
-    _gh_token_checked = True
-    try:
-        result = subprocess.run(["gh", "auth", "token"], text=True, capture_output=True, timeout=10)
-    except FileNotFoundError:
-        return None
-    if result.returncode == 0:
-        _gh_token = result.stdout.strip()
-    return _gh_token
 
 
-def comments_v2(root: str, number: int, cutoff: str | None) -> list[dict]:
+def _comments_path(root: str, number: int, page: int) -> str:
+    return f"{root}/issues/{number}/comments?per_page=100&page={page}"
+
+
+def comments_v2(root: str, number: int, cutoff: str | None, fetch=None) -> list[dict]:
     comments = []
     for page in range(1, 101):
-        batch = api_v2(f"{root}/issues/{number}/comments?per_page=100&page={page}")
+        batch = (fetch or api_v2)(_comments_path(root, number, page))
         comments.extend(comment for comment in batch if cutoff is None or comment["created_at"] < cutoff)
         if len(batch) < 100 or (cutoff and batch and batch[-1]["created_at"] >= cutoff):
             break
@@ -72,6 +111,17 @@ def clean_v2(value: str | None, target_number: int | None) -> str:
         return value.strip()
     target = _target_mention(target_number)
     return "\n".join(line for line in value.splitlines() if not target.search(line)).strip()
+
+
+def _reference_excerpt(value: str | None, target_number: int | None, limit: int | None = 2000) -> str:
+    # Cut only after target lines are gone, so the excerpt cannot bring one back.
+    text = clean_v2(value, target_number)
+    if limit is None or len(text) <= limit:
+        return text
+    # Cutting inside a longer number can leave the target number behind; stop before it.
+    if target_number is not None and (cut := _target_mention(target_number).search(text[:limit])):
+        limit = cut.start()
+    return text[:limit] + "\n[Reference truncated; original is longer]"
 
 
 def refs_v2(text: str, default_owner: str, default_repo: str) -> list[tuple[str, str, int]]:
@@ -107,11 +157,93 @@ def _github_repo(entire_repo: str) -> tuple[str, str]:
     return match.group(1), match.group(2)
 
 
-def _tree(root: str, sha: str) -> tuple[set[str], dict]:
-    tree = api_v2(f"{root}/git/trees/{sha}?recursive=1")
+def _tree_path(root: str, sha: str) -> str:
+    return f"{root}/git/trees/{sha}?recursive=1"
+
+
+def _tree(fetch, root: str, sha: str) -> tuple[set[str], dict]:
+    tree = fetch(_tree_path(root, sha))
     if tree.get("truncated"):
         raise ValueError("GitHub tree truncated; cannot validate paths")
     return repo_map_v2(tree)
+
+
+def _head_sha(fetch, root: str) -> str:
+    branch = urllib.parse.quote(fetch(root)["default_branch"], safe="")
+    return fetch(f"{root}/commits/{branch}")["sha"]
+
+
+def _parent_sha(fetch, root: str, pr: dict) -> str:
+    return fetch(f"{root}/commits/{pr['merge_commit_sha']}")["parents"][0]["sha"]
+
+
+def _issue_text(fetch, root: str, number: int, issue: dict, target: int | None, cutoff: str | None):
+    title = clean_v2(issue["title"], target)
+    body = clean_v2(issue.get("body"), target)
+    comments = [clean_v2(comment.get("body"), target) for comment in comments_v2(root, number, cutoff, fetch)]
+    return title, body, comments, "\n".join([title, body, *comments])
+
+
+def _reference(fetch, ref: tuple[str, str, int], target: int | None, cutoff: str | None) -> dict | None:
+    """One referenced issue or PR, or None when it is the target, missing or past the cutoff."""
+    ref_owner, ref_repo, number = ref
+    if target is not None and number == target:
+        return None
+    ref_root = f"repos/{ref_owner}/{ref_repo}"
+    try:
+        item = fetch(f"{ref_root}/issues/{number}")
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return None
+        raise
+    if cutoff is not None and item["created_at"] >= cutoff:
+        return None
+    label = f"{ref_owner}/{ref_repo}#{number}"
+    if "pull_request" in item:
+        detail = fetch(f"{ref_root}/pulls/{number}")
+        return {
+            "reference": label, "type": "PR", "title": clean_v2(detail["title"], target),
+            "body": _reference_excerpt(detail.get("body"), target, REFERENCE_BODY_LIMIT),
+            "pointer": f"PR #{number}: {item.get('comments', 0)} comments, {detail.get('changed_files', 0)} files changed (not included)",
+        }
+    comments = comments_v2(ref_root, number, cutoff, fetch)
+    reference = {
+        "reference": label, "type": "issue", "title": clean_v2(item["title"], target),
+        "body": _reference_excerpt(item.get("body"), target, REFERENCE_BODY_LIMIT),
+        "comments": [_reference_excerpt(comment.get("body"), target, REFERENCE_COMMENT_LIMIT)
+                     for comment in comments[:REFERENCE_COMMENTS]],
+    }
+    if len(reference["comments"]) < len(comments):
+        reference["pointer"] = f"issue #{number}: first {len(reference['comments'])} of {len(comments)} comments included"
+    return reference
+
+
+def _prefetch(pool: ThreadPoolExecutor, fetch, root: str, issue_number: int, owner: str, repo: str,
+              target: int | None, entire_repo: str) -> None:
+    """Start the requests build_context is about to make, so its in-order pass finds them ready.
+
+    Results and errors are kept by ``fetch`` and read again by that pass, so nothing here
+    decides what the context contains or which error is raised.
+    """
+    issue_path = f"{root}/issues/{issue_number}"
+    target_path = f"{root}/pulls/{target}"
+
+    def tree():
+        sha = _head_sha(fetch, root) if target is None else _parent_sha(fetch, root, fetch(target_path))
+        fetch(_tree_path(root, sha))
+
+    def references():
+        cutoff = None if target is None else fetch(target_path)["created_at"]
+        context = _issue_text(fetch, root, issue_number, fetch(issue_path), target, cutoff)[3]
+        for ref in refs_v2(context, owner, repo):
+            pool.submit(_reference, fetch, ref, target, cutoff)
+
+    pool.submit(fetch, issue_path)
+    pool.submit(fetch, _comments_path(root, issue_number, 1))
+    pool.submit(tree)
+    if target is not None and (fork := re.fullmatch(r"gh/([\w.-]+)/([\w.-]+)", entire_repo)):
+        pool.submit(_head_sha, fetch, f"repos/{fork.group(1)}/{fork.group(2)}")
+    pool.submit(references)
 
 
 def _safe_bundle(bundle: Bundle, target: int | None) -> None:
@@ -139,69 +271,54 @@ def build_context(
     owner, repo, issue_text_number = issue_match.groups()
     issue_number = int(issue_text_number)
     root = f"repos/{owner}/{repo}"
-    issue = api_v2(f"{root}/issues/{issue_number}")
+    pr_match = PR_URL.fullmatch(pr_url) if pr_url is not None else None
+    paired = bool(pr_match) and pr_match.group(1, 2) == (owner, repo)
+    fetch = _Once()
+    pool = ThreadPoolExecutor(max_workers=WORKERS, thread_name_prefix="prism-github")
+    try:
+        if pr_url is None or paired:
+            _prefetch(pool, fetch, root, issue_number, owner, repo,
+                      int(pr_match.group(3)) if paired else None, entire_repo)
+        return _collect(fetch, root, issue_number, owner, repo, pr_url is not None, pr_match if paired else None,
+                        pre_merge_sha, entire_repo)
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
+
+
+def _collect(fetch, root: str, issue_number: int, owner: str, repo: str, benchmark: bool,
+             pr_match: re.Match | None, pre_merge_sha: str | None, entire_repo: str) -> Context:
+    issue = fetch(f"{root}/issues/{issue_number}")
 
     target: int | None = None
     cutoff: str | None = None
-    if pr_url is not None:
-        pr_match = PR_URL.fullmatch(pr_url)
-        if not pr_match or pr_match.group(1, 2) != (owner, repo):
+    if benchmark:
+        if not pr_match:
             raise ValueError("Bad issue/PR pair")
         target = int(pr_match.group(3))
-        pr = api_v2(f"{root}/pulls/{target}")
+        pr = fetch(f"{root}/pulls/{target}")
         if issue["state"] != "closed" or not pr.get("merged_at"):
             raise ValueError("Issue must be closed and PR merged")
         cutoff = pr["created_at"]
-        before = api_v2(f"{root}/commits/{pr['merge_commit_sha']}")["parents"][0]["sha"]
+        before = _parent_sha(fetch, root, pr)
         if pre_merge_sha is not None and before != pre_merge_sha:
             raise ValueError("Target PR parent does not match pre_merge_sha")
         fork_owner, fork_repo = _github_repo(entire_repo)
-        fork_root = f"repos/{fork_owner}/{fork_repo}"
-        fork_branch = urllib.parse.quote(api_v2(fork_root)["default_branch"], safe="")
-        if api_v2(f"{fork_root}/commits/{fork_branch}")["sha"] != before:
+        if _head_sha(fetch, f"repos/{fork_owner}/{fork_repo}") != before:
             raise ValueError("Entire repository default branch does not match the pre-merge commit")
-        known, repo_map = _tree(root, before)
+        known, repo_map = _tree(fetch, root, before)
     else:
-        repository = api_v2(root)
-        branch = urllib.parse.quote(repository["default_branch"], safe="")
-        sha = api_v2(f"{root}/commits/{branch}")["sha"]
-        known, repo_map = _tree(root, sha)
+        known, repo_map = _tree(fetch, root, _head_sha(fetch, root))
 
-    body = clean_v2(issue.get("body"), target)
-    issue_comments = [clean_v2(comment.get("body"), target) for comment in comments_v2(root, issue_number, cutoff)]
-    issue_context = "\n".join([clean_v2(issue["title"], target), body, *issue_comments])
+    title, body, issue_comments, issue_context = _issue_text(fetch, root, issue_number, issue, target, cutoff)
     references: list[dict] = []
     safe_refs: set[tuple[str, str, int]] = set()
-    for ref_owner, ref_repo, number in refs_v2(issue_context, owner, repo):
-        if target is not None and number == target:
-            continue
-        ref_root = f"repos/{ref_owner}/{ref_repo}"
-        try:
-            item = api_v2(f"{ref_root}/issues/{number}")
-        except urllib.error.HTTPError as error:
-            if error.code == 404:
-                continue
-            raise
-        if cutoff is not None and item["created_at"] >= cutoff:
-            continue
-        safe_refs.add((ref_owner, ref_repo, number))
-        label = f"{ref_owner}/{ref_repo}#{number}"
-        if "pull_request" in item:
-            detail = api_v2(f"{ref_root}/pulls/{number}")
-            references.append({
-                "reference": label, "type": "PR", "title": clean_v2(detail["title"], target),
-                "body": clean_v2(detail.get("body"), target),
-                "pointer": f"PR #{number}: {item.get('comments', 0)} comments, {detail.get('changed_files', 0)} files changed (not included)",
-            })
-        else:
-            references.append({
-                "reference": label, "type": "issue", "title": clean_v2(item["title"], target),
-                "body": clean_v2(item.get("body"), target),
-                "comments": [clean_v2(comment.get("body"), target) for comment in comments_v2(ref_root, number, cutoff)],
-            })
+    for ref in refs_v2(issue_context, owner, repo):
+        if reference := _reference(fetch, ref, target, cutoff):
+            safe_refs.add(ref)
+            references.append(reference)
     paths = sorted(set(re.findall(r"(?<![\w./-])(?:[\w.-]+/)+[\w.-]+\.[A-Za-z0-9]+", issue_context)) & known)
     bundle = Bundle(
-        issue={"title": clean_v2(issue["title"], target), "body": body, "comments": issue_comments},
+        issue={"title": title, "body": body, "comments": issue_comments},
         references=references, path_hints=paths, repo_map=repo_map,
     )
     _safe_bundle(bundle, target)
