@@ -48,7 +48,7 @@ def clean_v2(value: str | None, target_number: int | None) -> str:
     value = re.split(r"(?im)^#{1,3}\s*(?:system information|environment information)\s*$", value or "")[0]
     if target_number is None:
         return value.strip()
-    target = re.compile(rf"(?<!\d)#{target_number}(?!\d)|/pull/{target_number}(?!\d)", re.I)
+    target = _target_mention(target_number)
     return "\n".join(line for line in value.splitlines() if not target.search(line)).strip()
 
 
@@ -93,8 +93,15 @@ def _tree(root: str, sha: str) -> tuple[set[str], dict]:
 
 
 def _safe_bundle(bundle: Bundle, target: int | None) -> None:
-    if target is not None and re.search(rf"(?<!\d)#{target}(?!\d)|/pull/{target}(?!\d)", json.dumps(bundle.__dict__)):
+    if target is not None and _target_mention(target).search(json.dumps(bundle.__dict__)):
         raise ValueError("Target PR reference leaked into context")
+
+
+def _target_mention(target: int) -> re.Pattern:
+    return re.compile(
+        rf"(?<!\d)(?:#{target}|(?:pull\s+request|pr)\s*#?\s*{target})(?!\d)|/pull/{target}(?!\d)",
+        re.I,
+    )
 
 
 def build_context(
