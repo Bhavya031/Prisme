@@ -73,6 +73,14 @@ def _usage(**values) -> Usage:
                     for key in ("input", "output", "cached_input", "cache_write", "reasoning")})
 
 
+class Truncated(RuntimeError):
+    """The output cap cut a call short. The call is still billed, so its usage comes with the error."""
+
+    def __init__(self, message: str, usage: Usage):
+        super().__init__(message)
+        self.usage = usage
+
+
 async def call(provider: str, stage: str, prompt: str, schema: dict,
                max_output_tokens: int = MAX_TOKENS) -> tuple[dict, Usage]:
     """Call one provider with strict JSON output and return parsed data plus usage."""
@@ -85,20 +93,20 @@ async def call(provider: str, stage: str, prompt: str, schema: dict,
                 output_config={"effort": EFFORT, "format": {"type": "json_schema", "schema": schema}},
                 system=SYSTEM, messages=[{"role": "user", "content": prompt}],
             )
-            if response.stop_reason == "max_tokens":
-                raise RuntimeError("Claude output truncated")
-            data = json.loads("".join(block.text for block in response.content if block.type == "text"))
             usage = _usage(input=response.usage.input_tokens,
                            cached_input=getattr(response.usage, "cache_read_input_tokens", 0),
                            cache_write=getattr(response.usage, "cache_creation_input_tokens", 0),
                            output=response.usage.output_tokens)
+            if response.stop_reason == "max_tokens":
+                raise Truncated(f"Claude output truncated at {max_output_tokens} output tokens", usage)
+            data = json.loads("".join(block.text for block in response.content if block.type == "text"))
         else:
             response = await client.responses.create(
                 model=_model(provider), reasoning={"effort": EFFORT}, max_output_tokens=max_output_tokens,
                 instructions=SYSTEM, input=prompt,
                 text={"format": {"type": "json_schema", "name": stage, "schema": schema, "strict": True}},
             )
-            if response.status != "completed":
+            if response.status != "completed" and getattr(response, "usage", None) is None:
                 raise RuntimeError(f"OpenAI {stage} incomplete: {response.status}")
             details = getattr(response.usage, "input_tokens_details", None)
             output_details = getattr(response.usage, "output_tokens_details", None)
@@ -106,6 +114,9 @@ async def call(provider: str, stage: str, prompt: str, schema: dict,
                            cached_input=getattr(details, "cached_tokens", 0),
                            output=response.usage.output_tokens,
                            reasoning=getattr(output_details, "reasoning_tokens", 0))
+            if response.status != "completed":
+                reason = getattr(getattr(response, "incomplete_details", None), "reason", None) or response.status
+                raise Truncated(f"OpenAI {stage} incomplete: {reason} (output cap {max_output_tokens} tokens)", usage)
             data = json.loads(response.output_text)
     return data, usage
 

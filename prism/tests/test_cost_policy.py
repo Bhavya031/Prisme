@@ -296,6 +296,24 @@ class BudgetTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must be positive"):
                 self.predict(**budget)
 
+    def test_truncated_call_reports_everything_billed_so_far(self):
+        usage = Usage(input=500, output=300, cached_input=0, cache_write=0, reasoning=None)
+        original = models.call.side_effect
+
+        async def call(provider, stage, prompt, schema, max_output_tokens=models.MAX_TOKENS):
+            if stage == "decide":
+                raise models.Truncated("OpenAI decide incomplete: max_output_tokens (output cap 300 tokens)", usage)
+            return await original(provider, stage, prompt, schema, max_output_tokens)
+
+        models.call.side_effect = call
+        with self.assertRaisesRegex(pipeline.BudgetStop, "incomplete: max_output_tokens .*no prediction made") as raised:
+            self.predict(max_output_tokens=300)
+        spent = raised.exception.spent
+        # The plan call plus the truncated decision: 1500 input and 400 output tokens.
+        self.assertEqual((spent["model_calls"], spent["usage"].input, spent["usage"].output, spent["budget"]["stopped_by"]),
+                         (2, 1500, 400, "max_output_tokens"))
+        self.assertAlmostEqual(spent["estimated_cost_usd"], 0.007)
+
     def test_oversized_prompt_is_rejected_before_any_call(self):
         self.ctx.bundle.issue["body"] = "x" * 1_000_000
         with self.assertRaisesRegex(ValueError, "exceed model context window"):
