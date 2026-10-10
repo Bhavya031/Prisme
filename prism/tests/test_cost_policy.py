@@ -7,6 +7,7 @@ import tempfile
 import unittest
 import urllib.error
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from prism import cli, cost, entire, github_context, models, pipeline, policy
@@ -324,6 +325,43 @@ class BudgetTests(unittest.TestCase):
         # The plan call plus the truncated decision: 1500 input and 400 output tokens.
         self.assertEqual((spent["model_calls"], spent["usage"].input, spent["usage"].output, spent["budget"]["stopped_by"]),
                          (2, 1500, 400, "max_output_tokens"))
+        self.assertAlmostEqual(spent["estimated_cost_usd"], 0.007)
+
+    def openai_response(self, status, reason):
+        usage = SimpleNamespace(input_tokens=500, output_tokens=300, input_tokens_details=SimpleNamespace(cached_tokens=0),
+                                output_tokens_details=SimpleNamespace(reasoning_tokens=250))
+        response = SimpleNamespace(status=status, usage=usage, output_text="",
+                                   incomplete_details=SimpleNamespace(reason=reason) if reason else None)
+        client = SimpleNamespace(responses=SimpleNamespace(create=mock.AsyncMock(return_value=response)))
+        return mock.patch.object(models, "_client", mock.AsyncMock(return_value=client))
+
+    def test_only_an_output_cap_stop_is_reported_as_truncated(self):
+        mock.patch.stopall()  # the real models.call, with a fake OpenAI client
+        with self.openai_response("incomplete", "max_output_tokens"), \
+             self.assertRaisesRegex(models.Truncated, r"incomplete: max_output_tokens \(output cap 300 tokens\)"):
+            asyncio.run(models.call("openai", "decide", "prompt", {}, 300))
+        for status, reason, message in (("incomplete", "content_filter", "OpenAI decide incomplete: content_filter"),
+                                        ("failed", None, "OpenAI decide failed")):
+            with self.openai_response(status, reason), self.assertRaises(models.BilledError) as raised:
+                asyncio.run(models.call("openai", "decide", "prompt", {}, 300))
+            self.assertNotIsInstance(raised.exception, models.Truncated)
+            self.assertEqual((str(raised.exception), raised.exception.usage.output), (message, 300))
+
+    def test_billed_failure_that_is_not_the_output_cap_is_a_plain_failure_with_spend(self):
+        usage = Usage(input=500, output=300, cached_input=0, cache_write=0, reasoning=None)
+        original = models.call.side_effect
+
+        async def call(provider, stage, prompt, schema, max_output_tokens=models.MAX_TOKENS):
+            if stage == "decide":
+                raise models.BilledError("OpenAI decide incomplete: content_filter", usage)
+            return await original(provider, stage, prompt, schema, max_output_tokens)
+
+        models.call.side_effect = call
+        with self.assertRaisesRegex(models.BilledError, "^OpenAI decide incomplete: content_filter$") as raised:
+            self.predict(max_output_tokens=300)
+        self.assertNotIsInstance(raised.exception, pipeline.BudgetStop)
+        spent = raised.exception.spent
+        self.assertEqual((spent["model_calls"], spent["usage"].output, spent["budget"]["stopped_by"]), (2, 400, None))
         self.assertAlmostEqual(spent["estimated_cost_usd"], 0.007)
 
     def test_oversized_prompt_is_rejected_before_any_call(self):

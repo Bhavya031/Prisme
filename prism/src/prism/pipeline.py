@@ -150,6 +150,11 @@ async def predict(ctx: Context, provider: str, *, max_cost_usd: float | None = N
     except models.Truncated as error:
         usages.append(error.usage)
         raise BudgetStop(f"{error}; no prediction made", _spent(provider, usages, limits, "max_output_tokens")) from None
+    except models.BilledError as error:
+        # Not a budget stop, but the failed call still counts toward what was spent.
+        usages.append(error.usage)
+        error.spent = _spent(provider, usages, limits, None)
+        raise
     except TimeoutError:
         # A network read timeout inside the pipeline is not the prediction deadline.
         if not deadline.expired():
