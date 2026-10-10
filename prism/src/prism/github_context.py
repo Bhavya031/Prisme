@@ -156,8 +156,10 @@ def build_context(
         if pre_merge_sha is not None and before != pre_merge_sha:
             raise ValueError("Target PR parent does not match pre_merge_sha")
         fork_owner, fork_repo = _github_repo(entire_repo)
-        if api_v2(f"repos/{fork_owner}/{fork_repo}/commits/main")["sha"] != before:
-            raise ValueError("Entire repository main does not match the pre-merge commit")
+        fork_root = f"repos/{fork_owner}/{fork_repo}"
+        fork_branch = urllib.parse.quote(api_v2(fork_root)["default_branch"], safe="")
+        if api_v2(f"{fork_root}/commits/{fork_branch}")["sha"] != before:
+            raise ValueError("Entire repository default branch does not match the pre-merge commit")
         known, repo_map = _tree(root, before)
     else:
         repository = api_v2(root)

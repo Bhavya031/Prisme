@@ -1,0 +1,72 @@
+[
+  {
+    "issue_url": "https://github.com/fastapi/typer/issues/1787",
+    "pr_url": "https://github.com/fastapi/typer/pull/1788",
+    "fork": "Bhavya031/typer-entire-file-finding",
+    "pre_merge_sha": "959a356fec72cedcfd4ee3f84790789f8e961989",
+    "modified_existing_files": ["tests/test_others.py", "typer/core.py"]
+  },
+  {
+    "issue_url": "https://github.com/psf/black/issues/4963",
+    "pr_url": "https://github.com/psf/black/pull/4964",
+    "fork": "Bhavya031/black-entire-premerge-4964",
+    "pre_merge_sha": "5cdb4b6c238ec7e7a87954b041ee241a1c0acfb5",
+    "modified_existing_files": ["CHANGES.md", "src/black/__init__.py", "tests/test_black.py"]
+  },
+  {
+    "issue_url": "https://github.com/pallets/jinja/issues/1253",
+    "pr_url": "https://github.com/pallets/jinja/pull/1665",
+    "fork": "Bhavya031/jinja-premerge-1253-entire",
+    "pre_merge_sha": "fbc3a696c729d177340cc089531de7e2e5b6f065",
+    "modified_existing_files": ["CHANGES.rst", "src/jinja2/idtracking.py", "tests/test_regression.py"]
+  },
+  {
+    "issue_url": "https://github.com/Textualize/rich/issues/4038",
+    "pr_url": "https://github.com/Textualize/rich/pull/4079",
+    "fork": "Bhavya031/rich-entire-file-finding",
+    "pre_merge_sha": "19c67b9a3479841e9133bea94607c89ee931d3fc",
+    "modified_existing_files": ["CHANGELOG.md", "rich/markdown.py", "tests/test_markdown.py"]
+  },
+  {
+    "issue_url": "https://github.com/aio-libs/aiohttp/issues/3636",
+    "pr_url": "https://github.com/aio-libs/aiohttp/pull/7364",
+    "fork": "Bhavya031/aiohttp-file-finding-3636",
+    "pre_merge_sha": "6c24cd40b772a4f0a92dac4a1435dcd795ccc61e",
+    "modified_existing_files": ["CONTRIBUTORS.txt", "aiohttp/client_reqrep.py", "aiohttp/connector.py", "tests/conftest.py", "tests/test_client_request.py", "tests/test_connector.py"]
+  },
+  {
+    "issue_url": "https://github.com/fastapi/fastapi/issues/3608",
+    "pr_url": "https://github.com/fastapi/fastapi/pull/3607",
+    "fork": "Bhavya031/fastapi-entire-file-finding-3608",
+    "pre_merge_sha": "de6ccd77544b0c6e5bdcf2f470e6fd1a068344ef",
+    "modified_existing_files": ["fastapi/encoders.py", "tests/test_serialize_response_dataclass.py"]
+  },
+  {
+    "issue_url": "https://github.com/Kludex/starlette/issues/3357",
+    "pr_url": "https://github.com/Kludex/starlette/pull/3471",
+    "fork": "Bhavya031/starlette",
+    "pre_merge_sha": "04d7869c1ec3016fa11f58382a9ac7bc14b46662",
+    "modified_existing_files": ["docs/middleware.md", "starlette/_utils.py", "starlette/datastructures.py", "starlette/middleware/trustedhost.py", "starlette/testclient.py", "tests/middleware/test_trusted_host.py", "tests/test_testclient.py"]
+  },
+  {
+    "issue_url": "https://github.com/Kludex/uvicorn/issues/3040",
+    "pr_url": "https://github.com/Kludex/uvicorn/pull/3041",
+    "fork": "Bhavya031/uvicorn-entire-file-finding",
+    "pre_merge_sha": "49de1b91d497d038d97a0475f7459fbf66b9b8f9",
+    "modified_existing_files": ["tests/protocols/test_websocket.py", "uvicorn/protocols/websockets/websockets_sansio_impl.py"]
+  },
+  {
+    "issue_url": "https://github.com/pydantic/pydantic/issues/12424",
+    "pr_url": "https://github.com/pydantic/pydantic/pull/12430",
+    "fork": "Bhavya031/pydantic-entire-file-finding-12424",
+    "pre_merge_sha": "f334963c7e304d1dc4ef4fa5955e87cd6a11c750",
+    "modified_existing_files": ["pydantic/json_schema.py", "tests/test_json_schema.py"]
+  },
+  {
+    "issue_url": "https://github.com/encode/httpx/issues/2788",
+    "pr_url": "https://github.com/encode/httpx/pull/2846",
+    "fork": "Bhavya031/httpx-entire-file-finding",
+    "pre_merge_sha": "c3585a5ccfa57bec653f3846b8625a27d11dcd5e",
+    "modified_existing_files": ["httpx/_auth.py", "tests/test_auth.py"]
+  }
+]
