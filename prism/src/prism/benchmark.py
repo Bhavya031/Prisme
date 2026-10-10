@@ -33,13 +33,14 @@ def _trace_id(span) -> str | None:
 async def _case(case: dict) -> dict:
     try:
         started = time.monotonic()
-        ctx = await asyncio.to_thread(
-            github_context.build_context,
-            case["issue_url"],
-            entire_repo=f"gh/{case['fork']}",
-            pr_url=case["pr_url"],
-            pre_merge_sha=case["pre_merge_sha"],
-        )
+        with tracing.step("collect-context", "TOOL"):
+            ctx = await asyncio.to_thread(
+                github_context.build_context,
+                case["issue_url"],
+                entire_repo=f"gh/{case['fork']}",
+                pr_url=case["pr_url"],
+                pre_merge_sha=case["pre_merge_sha"],
+            )
         # Both model submissions complete before grading can fetch the fixing PR files.
         claude, openai = await asyncio.gather(pipeline.predict(ctx, "claude"), pipeline.predict(ctx, "openai"))
         with tracing.step("grade", "TOOL"):

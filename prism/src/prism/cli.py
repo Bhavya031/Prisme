@@ -29,7 +29,7 @@ def _prediction_data(value):
     return asdict(value) if is_dataclass(value) else value
 
 
-def _print_predictions(predictions, output_format):
+def _print_predictions(predictions, output_format, trace_id=None):
     data = {_prediction_data(prediction)["provider"]: _prediction_data(prediction)
             for prediction in predictions}
     if output_format == "json":
@@ -44,6 +44,8 @@ def _print_predictions(predictions, output_format):
                     print(f"- `{path}`")
             print(f"Model calls: {prediction['model_calls']}")
             print(f"Estimated cost: ${prediction['estimated_cost_usd']:.8f}")
+            if trace_id:
+                print(f"Neatlogs trace: {trace_id}")
         return
     for provider, prediction in data.items():
         print(provider + ":")
@@ -54,21 +56,28 @@ def _print_predictions(predictions, output_format):
 def main(argv=None) -> None:
     args = parser().parse_args(argv)
     if args.command == "predict":
-        from .github_context import build_context
+        from . import tracing
         from .pipeline import predict
+        from .github_context import build_context
 
-        ctx = build_context(args.issue_url, entire_repo=args.repo)
-        providers = ("claude", "openai") if args.provider == "both" else (args.provider,)
-        outcomes = asyncio.run(_predict(ctx, providers))
-        predictions = []
-        for provider, outcome in zip(providers, outcomes):
-            if isinstance(outcome, Exception):
-                print(f"{provider} failed: {outcome}", file=sys.stderr)
-            else:
-                predictions.append(outcome)
-        if not predictions:
-            raise SystemExit("All requested providers failed")
-        _print_predictions(predictions, args.format or "text")
+        tracing.init()
+        try:
+            with tracing.workflow("issue-to-files") as span:
+                with tracing.step("collect-context", "TOOL"):
+                    ctx = build_context(args.issue_url, entire_repo=args.repo)
+                providers = ("claude", "openai") if args.provider == "both" else (args.provider,)
+                outcomes = asyncio.run(_predict(ctx, providers))
+            predictions = []
+            for provider, outcome in zip(providers, outcomes):
+                if isinstance(outcome, Exception):
+                    print(f"{provider} failed: {outcome}", file=sys.stderr)
+                else:
+                    predictions.append(outcome)
+            if not predictions:
+                raise SystemExit("All requested providers failed")
+            _print_predictions(predictions, args.format or "text", _trace_id(span))
+        finally:
+            tracing.shutdown()
         return
     from .benchmark import run
 
@@ -86,3 +95,9 @@ async def _predict(ctx, providers):
         return await asyncio.gather(*(predict(ctx, provider) for provider in providers), return_exceptions=True)
     finally:
         await models.close()
+
+
+def _trace_id(span):
+    context = getattr(span, "get_span_context", lambda: None)()
+    trace_id = getattr(context, "trace_id", None)
+    return format(trace_id, "032x") if trace_id is not None else None
