@@ -91,7 +91,8 @@ def search(term: str, repo: str, limit: int = 30) -> list[Hit]:
     if os.environ.get("PRISM_ENTIRE_TRANSPORT") == "http":
         return _search_http(term, repo, limit)
     result = subprocess.run(
-        ["entire", "search", "--code", term, "--repo", repo, "--json", "--limit", str(limit)],
+        # Terms go after "--" so one starting with "-" is not read as a flag.
+        ["entire", "search", "--code", "--repo", repo, "--json", "--limit", str(limit), "--", term],
         capture_output=True,
         text=True,
         timeout=45,

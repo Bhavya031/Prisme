@@ -1,11 +1,16 @@
 import io
+import json
+import logging
 import os
+import sys
 import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from prism import cli, entire, tracing
+from prism import benchmark, cli, entire, tracing
+from prism.types import Hit
 
 
 class EntireTests(unittest.TestCase):
@@ -83,6 +88,39 @@ class EntireTests(unittest.TestCase):
             with tracing.step("collect-context", "TOOL"):
                 pass
         sdk.trace.assert_called_once_with("collect-context", kind="TOOL")
+
+    def test_search_term_starting_with_dashes_is_not_a_flag(self):
+        result = SimpleNamespace(returncode=0, stdout='{"results":[]}', stderr="")
+        with mock.patch.dict(entire.os.environ, {"PRISM_ENTIRE_TRANSPORT": ""}), \
+             mock.patch.object(entire.subprocess, "run", return_value=result) as run:
+            self.assertEqual(entire.search("--watch", "gh/o/r"), [])
+        self.assertEqual(run.call_args.args[0][-2:], ["--", "--watch"])
+
+    def test_neatlogs_logs_do_not_reach_stdout(self):
+        handler = logging.StreamHandler(sys.stdout)
+        logger = logging.getLogger("neatlogs")
+        logger.addHandler(handler)
+        self.addCleanup(logger.removeHandler, handler)
+        with mock.patch.dict(os.environ, {"NEATLOGS_API_KEY": "key"}):
+            tracing._sdk()
+        self.assertIs(handler.stream, sys.stderr)
+
+    def test_benchmark_accepts_a_manifest_of_any_size(self):
+        cases = [
+            {"issue_url": f"https://github.com/o/r{n}/issues/1", "pr_url": "p", "fork": "o/r", "pre_merge_sha": "s"}
+            for n in range(3)
+        ]
+        ctx = SimpleNamespace(target_pr=None, bundle=Hit(path="a.py", line=1, text="x"))
+        with tempfile.TemporaryDirectory() as folder, \
+             mock.patch("prism.github_context.build_context", return_value=ctx), \
+             mock.patch("builtins.print") as printed:
+            path = os.path.join(folder, "cases.json")
+            with open(path, "w") as file:
+                json.dump(cases, file)
+            cli.main(["dry-run", "--manifest", path])
+            self.assertEqual(len(json.loads(printed.call_args.args[0])["cases"]), 3)
+            # No pytest case here, so --one takes the first case.
+            self.assertEqual(len(benchmark.run(Path(path), one=True, dry_run=True)["cases"]), 1)
 
 
 if __name__ == "__main__":

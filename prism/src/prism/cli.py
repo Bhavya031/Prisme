@@ -22,7 +22,8 @@ def parser() -> argparse.ArgumentParser:
 
     benchmark = commands.add_parser("benchmark")
     benchmark.add_argument("--one", action="store_true")
-    commands.add_parser("dry-run")
+    benchmark.add_argument("--manifest", type=Path, default=MANIFEST)
+    commands.add_parser("dry-run").add_argument("--manifest", type=Path, default=MANIFEST)
     return command_parser
 
 
@@ -99,9 +100,9 @@ def main(argv=None) -> None:
     from .benchmark import run
 
     if args.command == "benchmark":
-        print(json.dumps(run(MANIFEST, one=args.one, dry_run=False), indent=2, sort_keys=True))
+        print(json.dumps(run(args.manifest, one=args.one, dry_run=False), indent=2, sort_keys=True))
     else:
-        print(json.dumps(run(MANIFEST, one=False, dry_run=True), indent=2, sort_keys=True))
+        print(json.dumps(run(args.manifest, one=False, dry_run=True), indent=2, sort_keys=True))
 
 
 async def _predict(ctx, providers):

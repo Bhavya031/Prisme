@@ -1,7 +1,9 @@
 """Small Neatlogs lifecycle and span adapters."""
 
 import contextlib
+import logging
 import os
+import sys
 
 
 @contextlib.contextmanager
@@ -13,6 +15,10 @@ def _sdk():
     if not os.getenv("NEATLOGS_API_KEY"):
         return None
     import neatlogs
+    # Neatlogs logs to stdout, which would corrupt JSON and markdown output.
+    for handler in logging.getLogger("neatlogs").handlers:
+        if getattr(handler, "stream", None) is sys.stdout:
+            handler.setStream(sys.stderr)
     return neatlogs
 
 
