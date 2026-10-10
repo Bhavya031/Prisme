@@ -64,10 +64,13 @@ class ResultSavingTests(unittest.TestCase):
             self.events.append(("truth", pr_url))
             return {"src/a.py", "src/b.py"}
 
-        environment = {key: value for key, value in os.environ.items() if key != "NEATLOGS_API_KEY"}
+        # Nothing from the real environment or a local .env may reach tracing or model selection.
+        dropped = ("NEATLOGS_API_KEY", "PRISM_CLAUDE_MODEL", "PRISM_OPENAI_MODEL", "PRISM_ENTIRE_TRANSPORT")
+        environment = {key: value for key, value in os.environ.items() if key not in dropped}
         environment.update({"ANTHROPIC_API_KEY": SECRET, "GITHUB_TOKEN": "ghp_" + "Z" * 36})
         for patch in (
             mock.patch.dict(os.environ, environment, clear=True),
+            mock.patch.object(cli, "_load_env"),
             mock.patch.object(github_context, "build_context", side_effect=build_context),
             mock.patch.object(github_context, "true_files", side_effect=true_files),
             mock.patch.object(pipeline, "predict", side_effect=predict),
