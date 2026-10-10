@@ -1,3 +1,4 @@
+import io
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -40,6 +41,21 @@ class EntireTests(unittest.TestCase):
             entire.ensure_ready("gh/o/r")
             self.assertEqual(entire.search("match", "gh/o/r")[0].path, "a.py")
         run.assert_not_called()
+
+    def test_http_auth_failure_is_clean(self):
+        error = entire.urllib.error.HTTPError("url", 403, "Forbidden", {}, io.BytesIO())
+        self.addCleanup(error.close)
+        with mock.patch.dict(entire.os.environ, {"ENTIRE_TOKEN": "token"}), \
+             mock.patch.object(entire.urllib.request, "urlopen", side_effect=error), \
+             self.assertRaisesRegex(RuntimeError, "authentication failed.*ENTIRE_TOKEN") as raised:
+            entire._request("https://example.test")
+        self.assertIsNone(raised.exception.__cause__)
+
+    def test_malformed_http_json_is_clean(self):
+        with mock.patch.dict(entire.os.environ, {"ENTIRE_TOKEN": "token"}), \
+             mock.patch.object(entire.urllib.request, "urlopen", return_value=io.StringIO("not json")), \
+             self.assertRaisesRegex(RuntimeError, "not valid JSON"):
+            entire._request("https://example.test")
 
     def test_cli_stops_before_collecting_context_when_entire_is_unavailable(self):
         with mock.patch.object(entire, "ensure_ready", side_effect=RuntimeError("Entire login required")), \

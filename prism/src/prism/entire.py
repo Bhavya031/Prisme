@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -53,8 +54,19 @@ def _request(url: str) -> dict | list:
     if not token:
         raise RuntimeError("ENTIRE_TOKEN is required for the Entire HTTP transport")
     request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-    with urllib.request.urlopen(request, timeout=45) as response:
-        return json.load(response)
+    try:
+        with urllib.request.urlopen(request, timeout=45) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        if error.code in (401, 403):
+            raise RuntimeError("Entire HTTP authentication failed; check ENTIRE_TOKEN") from None
+        raise RuntimeError(f"Entire HTTP request failed with status {error.code}") from None
+    except urllib.error.URLError as error:
+        raise RuntimeError(f"Entire HTTP request failed: {error.reason}") from None
+    except TimeoutError:
+        raise RuntimeError("Entire HTTP request timed out") from None
+    except json.JSONDecodeError:
+        raise RuntimeError("Entire HTTP response was not valid JSON") from None
 
 
 @lru_cache
