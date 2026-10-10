@@ -36,6 +36,31 @@ BUDGET_NOTE = ("Cost is an estimate from token counts and list prices, checked a
                "One call can cross max_cost_usd before its usage is known; further calls stop once the estimate reaches it.")
 
 
+class BudgetStop(RuntimeError):
+    """A budget ended the prediction before it had an answer; `spent` holds what the finished calls used."""
+
+    def __init__(self, message: str, spent: dict):
+        super().__init__(message)
+        self.spent = spent
+
+
+def _spent(provider: str, usages: list[Usage], limits: dict, stopped_by: str | None) -> dict:
+    usage = _combined_usage(usages, provider)
+    cost = models.estimate_cost(provider, usage)
+    return {
+        "model_calls": len(usages),
+        "usage": usage,
+        "estimated_cost_usd": cost,
+        "budget": {
+            **limits,
+            "extra_rounds_used": max(0, len(usages) - 2),
+            "stopped_by": stopped_by,
+            "over_max_cost": limits["max_cost_usd"] is not None and cost >= limits["max_cost_usd"],
+            "note": BUDGET_NOTE,
+        },
+    }
+
+
 def _safe_prompt(value: str, target_pr: int | None, provider: str | None = None,
                  max_output_tokens: int = models.MAX_TOKENS) -> str:
     if target_pr is not None and github_context._target_mention(target_pr).search(value):
@@ -112,18 +137,23 @@ async def predict(ctx: Context, provider: str, *, max_cost_usd: float | None = N
     if (max_cost_usd is not None and max_cost_usd <= 0) or (timeout_seconds is not None and timeout_seconds <= 0) \
             or not 1 <= max_output_tokens <= 128_000 or max_extra < 0:
         raise ValueError("Cost and time budgets must be positive")
-    run = _predict(ctx, provider, max_cost_usd, max_output_tokens, max_extra, timeout_seconds)
+    limits = {"max_cost_usd": max_cost_usd, "max_output_tokens": max_output_tokens,
+              "max_extra_rounds": max_extra, "timeout_seconds": timeout_seconds}
+    usages: list[Usage] = []
+    run = _predict(ctx, provider, limits, usages)
     if timeout_seconds is None:
         return await run
     try:
         return await asyncio.wait_for(run, timeout=timeout_seconds)
     except TimeoutError:
-        raise RuntimeError(f"Prediction timed out after {timeout_seconds:g}s; "
-                           "model calls already made are still billed") from None
+        # The call cut off mid-flight reported no usage and may still be billed.
+        raise BudgetStop(f"Prediction timed out after {timeout_seconds:g}s with {len(usages)} model call(s) finished; "
+                         "a call in flight may still be billed", _spent(provider, usages, limits, "timeout_seconds")) from None
 
 
-async def _predict(ctx: Context, provider: str, max_cost_usd: float | None, max_output_tokens: int,
-                   max_extra: int, timeout_seconds: float | None) -> Prediction:
+async def _predict(ctx: Context, provider: str, limits: dict, usages: list[Usage]) -> Prediction:
+    max_cost_usd, max_output_tokens, max_extra = limits["max_cost_usd"], limits["max_output_tokens"], limits["max_extra_rounds"]
+
     def safe_prompt(value: str) -> str:
         return _safe_prompt(value, ctx.target_pr, provider, max_output_tokens)
 
@@ -139,9 +169,10 @@ async def _predict(ctx: Context, provider: str, max_cost_usd: float | None, max_
         + "\n\nContext:\n" + json.dumps(bundle, ensure_ascii=False)
     )
     plan, first_usage = await models.call(provider, "plan", safe_prompt(plan_prompt), _PLAN_SCHEMA, max_output_tokens)
-    if max_cost_usd is not None and spent([first_usage]) >= max_cost_usd:
-        raise RuntimeError(f"Model cost budget reached after plan: estimated ${spent([first_usage]):.6f} "
-                           f"of ${max_cost_usd:g}, no prediction made")
+    usages.append(first_usage)
+    if max_cost_usd is not None and spent(usages) >= max_cost_usd:
+        raise BudgetStop(f"Model cost budget reached after plan: estimated ${spent(usages):.6f} "
+                         f"of ${max_cost_usd:g}, no prediction made", _spent(provider, usages, limits, "max_cost_usd"))
     terms = list(dict.fromkeys(term.strip() for term in plan["search_terms"] if term.strip()))[:10]
     if not terms:
         raise ValueError(f"{provider} returned no search terms")
@@ -160,7 +191,7 @@ async def _predict(ctx: Context, provider: str, max_cost_usd: float | None, max_
         + "\n\nSearch results and file candidates:\n" + json.dumps(grouped, ensure_ascii=False)
     )
     answer, second_usage = await models.call(provider, "decide", safe_prompt(decide_prompt), _DECIDE_SCHEMA, max_output_tokens)
-    usages = [first_usage, second_usage]
+    usages.append(second_usage)
     stopped_by = None
     extra_prompt = decide_prompt
     seen_requests = set()
@@ -187,7 +218,6 @@ async def _predict(ctx: Context, provider: str, max_cost_usd: float | None, max_
     dropped = sorted(all_paths - ctx.known_paths)
     by_category = {category: sorted(set(paths) & ctx.known_paths) for category, paths in by_category.items()}
     predicted = sorted(set().union(*by_category.values()))
-    usage = _combined_usage(usages, provider)
     return Prediction(
         provider=provider,
         by_category=by_category,
@@ -196,16 +226,5 @@ async def _predict(ctx: Context, provider: str, max_cost_usd: float | None, max_
         model_calls=len(usages),
         need_more_used=used_more,
         condensed=condensed,
-        usage=usage,
-        estimated_cost_usd=models.estimate_cost(provider, usage),
-        budget={
-            "max_cost_usd": max_cost_usd,
-            "max_output_tokens": max_output_tokens,
-            "max_extra_rounds": max_extra,
-            "timeout_seconds": timeout_seconds,
-            "extra_rounds_used": len(usages) - 2,
-            "stopped_by": stopped_by,
-            "over_max_cost": max_cost_usd is not None and spent(usages) >= max_cost_usd,
-            "note": BUDGET_NOTE,
-        },
+        **{key: value for key, value in _spent(provider, usages, limits, stopped_by).items() if key != "model_calls"},
     )

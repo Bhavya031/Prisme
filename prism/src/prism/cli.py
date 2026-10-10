@@ -64,14 +64,21 @@ def _prediction_data(value):
     return asdict(value) if is_dataclass(value) else value
 
 
-def _print_predictions(predictions, output_format, trace_id=None):
+def _print_predictions(predictions, output_format, trace_id=None, failed=None):
     data = {_prediction_data(prediction)["provider"]: _prediction_data(prediction)
             for prediction in predictions}
     if output_format == "json":
         from . import models, results
 
+        # A failed provider is reported too, with what a budget stop had already spent.
+        for provider, error in (failed or {}).items():
+            spent = dict(getattr(error, "spent", {}))
+            if "usage" in spent:
+                spent["usage"] = asdict(spent["usage"])
+            data[provider] = {"provider": provider, "status": "failed", "error": results.error_details(error), **spent}
         for provider, prediction in data.items():
-            prediction.update(model=models._model(provider), cost_type=results.COST_TYPE, cost_note=results.COST_NOTE)
+            prediction.update(model=models._model(provider), cost_type=results.COST_TYPE, cost_note=results.COST_NOTE,
+                              neatlogs_trace_id=trace_id)
         print(json.dumps(data, indent=2, sort_keys=True))
         return
     if output_format == "markdown":
@@ -166,15 +173,19 @@ def main(argv=None) -> None:
                 if args.max_output_tokens is not None:
                     budget["max_output_tokens"] = args.max_output_tokens
                 outcomes = asyncio.run(_predict(ctx, providers, budget))
-            predictions = []
+            predictions, failed = [], {}
             for provider, outcome in zip(providers, outcomes):
                 if isinstance(outcome, Exception):
+                    failed[provider] = outcome
                     print(f"{provider} failed: {outcome}", file=sys.stderr)
+                    if _trace_id(span):
+                        print(f"Neatlogs trace: {_trace_id(span)}", file=sys.stderr)
                 else:
                     predictions.append(outcome)
+            if predictions or args.format == "json":
+                _print_predictions(predictions, args.format or "text", _trace_id(span), failed)
             if not predictions:
                 raise SystemExit("All requested providers failed")
-            _print_predictions(predictions, args.format or "text", _trace_id(span))
         finally:
             tracing.shutdown()
         return

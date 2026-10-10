@@ -261,9 +261,12 @@ class BudgetTests(unittest.TestCase):
         self.assertIn("One call can cross max_cost_usd", result.budget["note"])
 
     def test_cost_limit_reached_by_the_plan_makes_no_second_call(self):
-        with self.assertRaisesRegex(RuntimeError, r"budget reached after plan: estimated \$0.003000 of \$0.003"):
+        with self.assertRaisesRegex(pipeline.BudgetStop, r"budget reached after plan: estimated \$0.003000 of \$0.003") as raised:
             self.predict(max_cost_usd=0.003)
         self.assertEqual(len(self.calls), 1)
+        spent = raised.exception.spent
+        self.assertEqual((spent["model_calls"], spent["usage"].input, spent["budget"]["stopped_by"]), (1, 1000, "max_cost_usd"))
+        self.assertAlmostEqual(spent["estimated_cost_usd"], 0.003)
 
     def test_cost_limit_stops_between_extra_rounds(self):
         result = self.predict(max_cost_usd=0.008, max_extra=3)
@@ -281,8 +284,14 @@ class BudgetTests(unittest.TestCase):
 
     def test_timeout_and_invalid_budgets(self):
         self.delay = 0.2
-        with self.assertRaisesRegex(RuntimeError, "timed out after 0.05s"):
+        with self.assertRaisesRegex(pipeline.BudgetStop, "timed out after 0.05s with 0 model call") as raised:
             self.predict(timeout_seconds=0.05)
+        self.assertEqual((raised.exception.spent["estimated_cost_usd"], raised.exception.spent["budget"]["stopped_by"]),
+                         (0.0, "timeout_seconds"))
+        # Calls that finished before the timeout keep their usage.
+        with self.assertRaisesRegex(pipeline.BudgetStop, "with 1 model call") as raised:
+            self.predict(timeout_seconds=0.3)
+        self.assertAlmostEqual(raised.exception.spent["estimated_cost_usd"], 0.003)
         for budget in ({"max_cost_usd": 0}, {"timeout_seconds": 0}, {"max_output_tokens": 0}, {"max_output_tokens": 128_001}, {"max_extra": -1}):
             with self.assertRaisesRegex(ValueError, "must be positive"):
                 self.predict(**budget)
@@ -301,12 +310,30 @@ class BudgetTests(unittest.TestCase):
                       "--max-cost-usd", "0.005", "--max-extra-rounds", "3", "--timeout-seconds", "30", "--max-output-tokens", "800"])
         prediction = json.loads(stdout.getvalue())["openai"]
         self.assertEqual((prediction["model"], prediction["cost_type"]), ("gpt-6-sol", "estimated_list_price"))
+        self.assertIn("neatlogs_trace_id", prediction)
         self.assertEqual(prediction["budget"] | {"note": None},
                          {"max_cost_usd": 0.005, "max_output_tokens": 800, "max_extra_rounds": 3, "timeout_seconds": 30.0,
                           "extra_rounds_used": 0, "stopped_by": "max_cost_usd", "over_max_cost": True, "note": None})
+        self.assertNotIn("status", prediction)
         # The JSON a predict run prints is a valid input for `prism cost`.
         report = cost.build_report(json.loads(stdout.getvalue()), CATALOG, None, 1)
         self.assertAlmostEqual(report["tested_models"]["openai"]["estimated_usd_per_case"], prediction["estimated_cost_usd"])
+
+    def test_cli_reports_a_budget_stop_as_json_with_what_was_spent(self):
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with mock.patch.object(cli, "_load_env"), mock.patch.object(entire, "ensure_ready"), \
+             mock.patch.object(github_context, "build_context", return_value=self.ctx), \
+             contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), \
+             self.assertRaisesRegex(SystemExit, "All requested providers failed"):
+            cli.main(["predict", "https://github.com/o/r/issues/1", "--repo", "gh/o/r", "--provider", "claude", "--format", "json",
+                      "--max-cost-usd", "0.001"])
+        failed = json.loads(stdout.getvalue())["claude"]
+        self.assertEqual((failed["status"], failed["error"]["type"], failed["model_calls"], failed["usage"]["input"]),
+                         ("failed", "BudgetStop", 1, 1000))
+        self.assertAlmostEqual(failed["estimated_cost_usd"], 0.003)
+        self.assertEqual((failed["budget"]["stopped_by"], failed["budget"]["over_max_cost"], failed["model"]),
+                         ("max_cost_usd", True, "claude-sonnet-5-5"))
+        self.assertIn("claude failed: Model cost budget reached after plan", stderr.getvalue())
 
 
 if __name__ == "__main__":
