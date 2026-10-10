@@ -89,9 +89,10 @@ def _assert_no_target_leak(ctx) -> None:
 
 def run(manifest: Path, *, one: bool, dry_run: bool) -> dict:
     cases = json.loads(manifest.read_text())
-    if len(cases) != 5:
-        raise ValueError("Expected five benchmark cases")
-    selected = [case for case in cases if "/pytest/" in case["issue_url"]] if one else cases
+    if not cases:
+        raise ValueError("Manifest has no benchmark cases")
+    # --one prefers the pytest case and falls back to the first for other manifests.
+    selected = ([case for case in cases if "/pytest/" in case["issue_url"]] or cases)[:1] if one else cases
     if dry_run:
         contexts = []
         for case in selected:
