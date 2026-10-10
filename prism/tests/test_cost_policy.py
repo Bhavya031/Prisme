@@ -112,6 +112,11 @@ class CostTests(NoNetwork):
             cost.build_report(saved_result([broken]), CATALOG, None, 10)
         with self.assertRaisesRegex(ValueError, "Expected a benchmark result"):
             cost.build_report({"nothing": 1}, CATALOG, None, 10)
+        stopped = {"openai": {"provider": "openai", "status": "failed", "usage": OPENAI_TOKENS}}
+        with self.assertRaisesRegex(ValueError, "no completed prediction"):
+            cost.build_report(stopped, CATALOG, None, 10)
+        report = cost.build_report(stopped | {"claude": {"provider": "claude", "usage": CLAUDE_TOKENS}}, CATALOG, None, 10)
+        self.assertEqual(list(report["tested_models"]), ["claude"])
 
     def run_cli(self, *argv):
         stdout, stderr = io.StringIO(), io.StringIO()

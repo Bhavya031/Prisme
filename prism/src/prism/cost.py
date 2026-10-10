@@ -36,6 +36,10 @@ def observed(data: dict) -> dict:
                    if provider in results.PROVIDERS and isinstance(value, dict) and "usage" in value}
     if not predictions:
         raise ValueError("Expected a benchmark result.json or `prism predict --format json` output")
+    # A provider stopped by a budget spent tokens but is not a full case to forecast from.
+    predictions = {provider: value for provider, value in predictions.items() if value.get("status") != "failed"}
+    if not predictions:
+        raise ValueError("The predict output has no completed prediction to price")
     return {"kind": "prediction", "run_id": None, "stage": None,
             "cases": [{provider: {"tokens": value["usage"]} for provider, value in predictions.items()}],
             "models": {provider: value.get("model") or models._model(provider) for provider, value in predictions.items()},
