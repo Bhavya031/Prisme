@@ -2,3 +2,5 @@
 .env
 __pycache__/
 benchmark-runs/
+uv.lock
+*.egg-info/
