@@ -36,7 +36,7 @@ def step(name, kind):
     sdk = _sdk()
     if not sdk:
         return _noop_span()
-    return sdk.span(kind=kind, name=name)
+    return sdk.trace(name, kind=kind)  # span() is decorator-only
 
 
 def shutdown():
