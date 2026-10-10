@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -16,22 +17,43 @@ CACHE = Path.home() / ".cache" / "entire-file-finding-v2"
 HEADERS = {"Accept": "application/vnd.github+json", "User-Agent": "prism"}
 ISSUE_URL = re.compile(r"https://github\.com/([\w.-]+)/([\w.-]+)/issues/(\d+)")
 PR_URL = re.compile(r"https://github\.com/([\w.-]+)/([\w.-]+)/pull/(\d+)")
+_IMMUTABLE_PATH = re.compile(r"repos/[\w.-]+/[\w.-]+/(?:commits|git/trees)/[0-9a-f]{40}(?:\?recursive=1)?$")
+_gh_token_checked = False
+_gh_token: str | None = None
 
 
 def api_v2(path: str):
-    """Fetch and cache a public GitHub response without caching credentials."""
+    """Fetch GitHub responses, caching only immutable SHA-addressed data."""
     CACHE.mkdir(parents=True, exist_ok=True)
     destination = CACHE / f"{hashlib.sha256(path.encode()).hexdigest()}.json"
-    if destination.exists() and not path.endswith("/commits/main"):
+    cacheable = bool(_IMMUTABLE_PATH.fullmatch(path))
+    if cacheable and destination.exists():
         return json.loads(destination.read_text())
     headers = dict(HEADERS)
-    if token := os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN"):
+    if token := _github_token():
         headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(f"https://api.github.com/{path}", headers=headers)
     with urllib.request.urlopen(request, timeout=40) as response:
         data = json.load(response)
-    destination.write_text(json.dumps(data))
+    if cacheable:
+        destination.write_text(json.dumps(data))
     return data
+
+
+def _github_token() -> str | None:
+    global _gh_token_checked, _gh_token
+    if token := os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN"):
+        return token
+    if _gh_token_checked:
+        return _gh_token
+    _gh_token_checked = True
+    try:
+        result = subprocess.run(["gh", "auth", "token"], text=True, capture_output=True, timeout=10)
+    except FileNotFoundError:
+        return None
+    if result.returncode == 0:
+        _gh_token = result.stdout.strip()
+    return _gh_token
 
 
 def comments_v2(root: str, number: int, cutoff: str | None) -> list[dict]:

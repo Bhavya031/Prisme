@@ -42,7 +42,12 @@ async def _case(case: dict) -> dict:
                 pre_merge_sha=case["pre_merge_sha"],
             )
         # Both model submissions complete before grading can fetch the fixing PR files.
-        claude, openai = await asyncio.gather(pipeline.predict(ctx, "claude"), pipeline.predict(ctx, "openai"))
+        outcomes = await asyncio.gather(
+            pipeline.predict(ctx, "claude"), pipeline.predict(ctx, "openai"), return_exceptions=True,
+        )
+        if error := next((outcome for outcome in outcomes if isinstance(outcome, Exception)), None):
+            raise error
+        claude, openai = outcomes
         with tracing.step("grade", "TOOL"):
             truth = await asyncio.to_thread(github_context.true_files, case["pr_url"], ctx.known_paths)
         if not truth:

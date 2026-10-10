@@ -6,7 +6,7 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
 
-MANIFEST = Path(__file__).parents[2] / "data" / "entire-file-finding-manifest.json"
+MANIFEST = Path(__file__).with_name("data") / "entire-file-finding-manifest.json"
 
 
 def parser() -> argparse.ArgumentParser:
