@@ -22,6 +22,13 @@ class EntireTests(unittest.TestCase):
              self.assertRaisesRegex(RuntimeError, "not ready.*mixed"):
             entire.ensure_ready("gh/o/r")
 
+    def test_repository_check_timeout_is_clean(self):
+        error = entire.subprocess.TimeoutExpired(["entire", "repo", "view"], 45)
+        with mock.patch.object(entire.subprocess, "run", side_effect=error), \
+             self.assertRaisesRegex(RuntimeError, "check timed out for gh/o/r") as raised:
+            entire.ensure_ready("gh/o/r")
+        self.assertIsNone(raised.exception.__cause__)
+
     def test_http_transport_uses_repository_data_without_cli(self):
         entire._repo_details.cache_clear()
         self.addCleanup(entire._repo_details.cache_clear)

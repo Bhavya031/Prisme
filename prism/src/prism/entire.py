@@ -24,6 +24,8 @@ def ensure_ready(repo: str) -> None:
             )
         except FileNotFoundError:
             raise RuntimeError("Entire CLI is not installed or is not on PATH") from None
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"Entire repository check timed out for {repo}") from None
         if result.returncode:
             detail = result.stderr.strip() or result.stdout.strip() or "Entire repository check failed"
             raise RuntimeError(
