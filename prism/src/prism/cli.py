@@ -15,7 +15,7 @@ def parser() -> argparse.ArgumentParser:
     predict = commands.add_parser("predict")
     predict.add_argument("issue_url")
     predict.add_argument("--repo", required=True)
-    predict.add_argument("--provider", choices=("claude", "openai", "both"))
+    predict.add_argument("--provider", choices=("claude", "openai", "both"), default="both")
     predict.add_argument("--format", choices=("text", "json", "markdown"))
 
     benchmark = commands.add_parser("benchmark")
@@ -53,8 +53,6 @@ def _print_predictions(predictions, output_format):
 def main(argv=None) -> None:
     args = parser().parse_args(argv)
     if args.command == "predict":
-        if args.provider is None:
-            raise SystemExit("predict requires --provider until the default model choice is decided")
         from .github_context import build_context
         from .pipeline import predict
 
