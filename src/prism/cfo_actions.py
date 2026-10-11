@@ -229,8 +229,8 @@ def allocate(estimate_path, run_id, issue_number):
         raise RuntimeError("CFO request table shape changed")
     if month_column in request_columns:
         month = row.get(PREFIX + "test allocation month")
-        if month is None or month == "":
-            raise RuntimeError(f"CFO decision row has no {PREFIX}test allocation month required by the request table")
+        if not isinstance(month, str) or not month:
+            raise RuntimeError(f"CFO decision row needs {PREFIX}test allocation month as text for the request table")
         request["allocation_month"] = month
     if any(member == request_id for member, _ in rows):
         return summary | allocate_existing(access_token, None, request_id) | {"already_recorded": True}
