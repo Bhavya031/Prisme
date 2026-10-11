@@ -11,6 +11,27 @@ permissions:
   issues: write
 
 jobs:
+  acknowledge:
+    if: >-
+      !github.event.issue.pull_request &&
+      ((github.event_name == 'issues' &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association)) ||
+       (github.event_name == 'issue_comment' && github.event.comment.user.type != 'Bot' &&
+        github.event.comment.body == '/prism estimate' &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Acknowledge the request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          if [ -n "$COMMENT_ID" ]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=eyes > /dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/reactions" -f content=eyes > /dev/null
+          fi
   estimate:
     if: >-
       !github.event.issue.pull_request &&
@@ -33,7 +54,7 @@ jobs:
       REPLAY_REF: ${{ vars.PRISM_REPLAY_REF }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       WORKER_MODEL: claude-sonnet-5-5
-      PRISM_COMMIT: 122ac0c94e2603a083ae13830ac135b075272fe2
+      PRISM_COMMIT: 68901f8dfe438feb4a24aff81183958d18b114c6
       GLANCE_COMMIT: 3465201a46801c96fe57958306e36eb3b3132679
     steps:
       - uses: actions/setup-python@v5
@@ -50,9 +71,19 @@ jobs:
           GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.PRISME_READ_TOKEN }}@github.com/Bhavya031/Prisme.insteadOf
           GIT_CONFIG_VALUE_0: https://github.com/Bhavya031/Prisme
         run: pip install "git+https://github.com/Bhavya031/Prisme.git@$PRISM_COMMIT" > /dev/null 2>&1
-      - name: Check event, authorization, and repository cooldown
+      - name: Resolve one immutable source commit
+        id: source
+        run: |
+          ref="$REPLAY_REF"
+          if [ -z "$ref" ]; then ref=$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch); fi
+          encoded_ref=$(jq -rn --arg ref "$ref" '$ref | @uri')
+          commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$encoded_ref" --jq .sha)
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { echo 'Could not resolve a source commit' >&2; exit 1; }
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "Source commit: $commit"
+      - name: Check event, authorization, duplicates, and repository cooldown
         id: gate
-        run: prism issue-gate --event "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
+        run: prism issue-gate --event "$GITHUB_EVENT_PATH" --commit "${{ steps.source.outputs.commit }}" >> "$GITHUB_OUTPUT"
       - name: Report repository cooldown
         if: steps.gate.outputs.note != ''
         env:
@@ -62,7 +93,9 @@ jobs:
       - name: Reserve this issue before any paid call
         if: steps.gate.outputs.note == ''
         run: |
-          printf '%s\n' '<!-- prism-estimate -->' 'Prism is estimating this issue.' > comment.md
+          printf '%s\n' '<!-- prism-estimate -->' '<!-- prism-loading -->' \
+            '### ⏳ Estimating' '' "Started: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
+            "[Workflow run]($RUN_URL)" > comment.md
           id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" --jq \
             '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- prism-estimate -->"))) | .id' | tail -n 1)
           if [ -n "$id" ]; then
@@ -70,19 +103,8 @@ jobs:
           else
             gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" -F body=@comment.md > /dev/null
           fi
-      - name: Resolve one immutable source commit
-        id: source
-        if: steps.gate.outputs.note == ''
-        run: |
-          ref="$REPLAY_REF"
-          if [ -z "$ref" ]; then ref=$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch); fi
-          encoded_ref=$(jq -rn --arg ref "$ref" '$ref | @uri')
-          commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$encoded_ref" --jq .sha)
-          [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { echo 'Could not resolve a source commit' >&2; exit 1; }
-          echo "commit=$commit" >> "$GITHUB_OUTPUT"
-          echo "Source commit: $commit"
       - uses: actions/checkout@v4
-        if: steps.source.outcome == 'success'
+        if: steps.gate.outputs.note == ''
         with:
           ref: ${{ steps.source.outputs.commit }}
           path: source
@@ -134,12 +156,13 @@ jobs:
               > estimate.json 2> estimate.err || status=$?
           fi
           prism issue-comment --prediction predict.json --estimate estimate.json \
+            --event "$GITHUB_EVENT_PATH" --commit "$commit" \
             --errors predict.err estimate.err --run-url "$RUN_URL" > comment.md || status=$?
           exit "$status"
       - name: Post or update the one Prism comment
         if: always() && ((steps.gate.outcome == 'success' && steps.gate.outputs.note == '') || steps.install.outcome == 'failure')
         run: |
-          if [ ! -s comment.md ]; then
+          if [ ! -s comment.md ] || grep -q '<!-- prism-loading -->' comment.md; then
             printf '%s\n' '<!-- prism-estimate -->' '### Prism estimate did not finish' '' \
               "**Stopped by:** setup failed before prediction. See the [workflow run]($RUN_URL)." > comment.md
           fi
