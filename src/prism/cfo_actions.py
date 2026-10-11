@@ -1,4 +1,4 @@
-"""Allocate one saved Prism estimate in the CFO.ai tables named by the repository's .github/prism.json."""
+"""Allocate one saved Prism estimate in the CFO.ai tables named by the loaded config."""
 
 import argparse
 import json
@@ -292,7 +292,7 @@ def main():
     parser.add_argument("estimate_json")
     parser.add_argument("run_id", type=int)
     parser.add_argument("--issue-number", type=int, required=True)
-    parser.add_argument("--config", required=True, help="the repository's .github/prism.json")
+    parser.add_argument("--config", required=True, help="the loaded Prism JSON config")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     try:
@@ -300,6 +300,9 @@ def main():
         missing = [key for key in CFO_KEYS if not isinstance(CFO.get(key), str) or not CFO[key]]
         if missing:
             raise RuntimeError(f"{args.config} needs a non-empty string for cfo." + ", cfo.".join(missing))
+        pending = [key for key in CFO_KEYS if CFO[key] == "PENDING"]
+        if pending:
+            raise RuntimeError(f"{args.config} still has PENDING CFO.ai settings: " + ", ".join("cfo." + key for key in pending))
         shared_login_repos()
         result = allocate(args.estimate_json, args.run_id, args.issue_number)
         Path(args.output).write_text(json.dumps(result, indent=2) + "\n")

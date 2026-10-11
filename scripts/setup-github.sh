@@ -6,10 +6,18 @@ target=${1:?Usage: scripts/setup-github.sh /path/to/target-repo}
 [[ -t 0 ]] || { echo 'Run this script in a terminal so secrets can be entered hidden.' >&2; exit 1; }
 repo=$(cd "$target" && gh repo view --json nameWithOwner --jq .nameWithOwner)
 [[ -n $repo ]] || { echo 'Could not identify the target GitHub repository.' >&2; exit 1; }
-for file in .github/prism.json .github/workflows/prism-estimate.yml .github/workflows/prism-cfo-allocation.yml; do
+read -r -p 'Shared Prisme config path (Enter for per-repository config): ' shared_config
+if [[ -n $shared_config ]]; then
+  [[ $shared_config =~ ^[A-Za-z0-9_./-]+$ && $shared_config != /* && $shared_config != *..* && -f "$source_dir/$shared_config" ]] || { echo 'Shared config must name a JSON file inside Prisme.' >&2; exit 1; }
+  provider=$(jq -er '.estimate.provider' "$source_dir/$shared_config")
+fi
+files=(.github/workflows/prism-estimate.yml .github/workflows/prism-cfo-allocation.yml)
+if [[ -z $shared_config ]]; then files+=(.github/prism.json); fi
+for file in "${files[@]}"; do
   [[ ! -e "$target/$file" ]] || { echo "$target/$file already exists; move it before setup." >&2; exit 1; }
 done
 
+if [[ -z $shared_config ]]; then
 keys=(org_id scenario page budget_table request_table decision_table column_prefix cooldown_minutes provider worker_model max_cost_usd max_output_tokens max_extra_rounds timeout_seconds)
 defaults=('' 'Main Scenario' '' '' '' '' '' 10 claude claude-sonnet-5-5 0.05 4000 1 180)
 values=()
@@ -46,15 +54,18 @@ if [[ -n $shared_repos ]]; then
   done
   [[ $found_current == true ]] || { echo "Shared login list must include $repo" >&2; exit 1; }
 fi
+provider=${values[8]}
+fi
 
-secrets=(ANTHROPIC_API_KEY NEATLOGS_API_KEY ENTIRE_TOKEN PRISME_READ_TOKEN CFO_OAUTH_CLIENT_ID CFO_OAUTH_REFRESH_TOKEN CFO_SECRET_WRITE_TOKEN)
+secrets=(ANTHROPIC_API_KEY OPENAI_API_KEY NEATLOGS_API_KEY ENTIRE_TOKEN PRISME_READ_TOKEN CFO_OAUTH_CLIENT_ID CFO_OAUTH_REFRESH_TOKEN CFO_SECRET_WRITE_TOKEN)
 for name in "${secrets[@]}"; do
   label=$name
-  if [[ $name == NEATLOGS_API_KEY || $name == PRISME_READ_TOKEN ]]; then label+=' (optional, Enter to skip)'; fi
+  optional=false
+  if [[ $name == NEATLOGS_API_KEY || $name == PRISME_READ_TOKEN || ( $name == ANTHROPIC_API_KEY && $provider != claude ) || ( $name == OPENAI_API_KEY && $provider != openai ) ]]; then optional=true; label+=' (optional, Enter to skip)'; fi
   while :; do
     read -r -s -p "$label: " value
     printf '\n'
-    if [[ -n $value || $name == NEATLOGS_API_KEY || $name == PRISME_READ_TOKEN ]]; then break; fi
+    if [[ -n $value || $optional == true ]]; then break; fi
     echo "$name is required." >&2
   done
   if [[ -n $value ]]; then
@@ -70,6 +81,7 @@ json_string() {
 }
 
 mkdir -p "$target/.github/workflows"
+if [[ -z $shared_config ]]; then
 {
   printf '{\n  "cfo": {\n'
   for i in {0..6}; do
@@ -99,6 +111,13 @@ mkdir -p "$target/.github/workflows"
   done
   printf '  }\n}\n'
 } > "$target/.github/prism.json"
+fi
 cp "$source_dir/examples/prism-estimate.yml" "$target/.github/workflows/prism-estimate.yml"
 cp "$source_dir/examples/prism-cfo-allocation.yml" "$target/.github/workflows/prism-cfo-allocation.yml"
+if [[ -n $shared_config ]]; then
+  for file in "${files[@]}"; do
+    awk -v config="$shared_config" '{ print; if ($0 == "      prisme_ref: main") print "      config: " config }' "$target/$file" > "$target/$file.tmp"
+    mv "$target/$file.tmp" "$target/$file"
+  done
+fi
 echo "Prism files are ready in $target. Commit and push them to the repository's default branch."

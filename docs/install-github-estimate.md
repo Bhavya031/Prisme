@@ -5,6 +5,7 @@
    - `ANTHROPIC_API_KEY`: required for the default Claude file prediction.
    - `NEATLOGS_API_KEY`: optional; sends prediction traces to Neatlogs when set. An absent secret leaves estimates untraced.
    - `ENTIRE_TOKEN`: read access to this repository in Entire. The workflow checks that its `gh/owner/repo` entry is ready before making model calls, and a live issue searches it for candidate files.
+   - `OPENAI_API_KEY`: required when `estimate.provider` is `openai`; `ANTHROPIC_API_KEY` is required only for `claude`.
    - `PRISME_READ_TOKEN`: GitHub read access to `Bhavya031/Prisme` while it is private; optional when public.
    - `CFO_OAUTH_CLIENT_ID`, `CFO_OAUTH_REFRESH_TOKEN`, and `CFO_SECRET_WRITE_TOKEN` for the CFO allocation. The write token must be able to update this repository's Actions secrets before OAuth refresh; the workflow checks this in the allocation job.
 

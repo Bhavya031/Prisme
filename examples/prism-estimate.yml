@@ -18,6 +18,7 @@ jobs:
       prisme_ref: main
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       NEATLOGS_API_KEY: ${{ secrets.NEATLOGS_API_KEY }}
       ENTIRE_TOKEN: ${{ secrets.ENTIRE_TOKEN }}
       PRISME_READ_TOKEN: ${{ secrets.PRISME_READ_TOKEN }}
