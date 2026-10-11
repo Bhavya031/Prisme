@@ -138,6 +138,7 @@ def allocate(estimate_path, run_id, issue_number):
     if run_id <= 0 or issue_number <= 0:
         raise ValueError("run ID and issue number must be positive")
     estimate = json.loads(Path(estimate_path).read_text())
+    estimate = estimate.get("estimate", estimate)
     commit = estimate.get("repository_commit", "")
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise RuntimeError("Saved estimate has no pinned commit")
@@ -199,7 +200,8 @@ def allocate(estimate_path, run_id, issue_number):
             if name not in recommended:
                 other_models.append({"model": name, "usd": float(usd(value, column))})
     other_models.sort(key=lambda item: (item["usd"], item["model"]))
-    summary = {"budget_usd": row.get("K2 test budget USD"), "spent_usd": row.get("K2 test spending USD"),
+    summary = {"predicted_files": estimate["assumptions"]["measurement"]["included_paths"],
+               "budget_usd": row.get("K2 test budget USD"), "spent_usd": row.get("K2 test spending USD"),
                "reserved_before_usd": row.get("K2 test existing reservations USD"),
                "max_budget_fraction": row.get("K2 test max budget fraction"),
                "available_usd": row.get("K2 test available USD"),
