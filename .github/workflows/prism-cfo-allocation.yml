@@ -1,0 +1,161 @@
+name: Prism automated estimation and allocation validation
+
+on:
+  workflow_call:
+    inputs:
+      prisme_ref:
+        required: true
+        type: string
+      run_id:
+        required: true
+        type: string
+      issue_number:
+        required: true
+        type: string
+      preflight_only:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      PRISME_READ_TOKEN:
+        required: false
+      CFO_OAUTH_CLIENT_ID:
+        required: true
+      CFO_OAUTH_REFRESH_TOKEN:
+        required: true
+      CFO_SECRET_WRITE_TOKEN:
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+concurrency:
+  group: prism-cfo-allocation
+  cancel-in-progress: false
+
+jobs:
+  allocate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CFO_OAUTH_CLIENT_ID: ${{ secrets.CFO_OAUTH_CLIENT_ID }}
+      CFO_OAUTH_REFRESH_TOKEN: ${{ secrets.CFO_OAUTH_REFRESH_TOKEN }}
+      CFO_SECRET_WRITE_TOKEN: ${{ secrets.CFO_SECRET_WRITE_TOKEN }}
+    steps:
+      - name: Check GitHub secret read and write access before CFO OAuth
+        env:
+          GH_TOKEN: ${{ secrets.CFO_SECRET_WRITE_TOKEN }}
+        run: |
+          gh api -H 'Accept: application/vnd.github.raw' "repos/$GITHUB_REPOSITORY/contents/.github/prism.json" > "$RUNNER_TEMP/prism.json"
+          jq -e --arg current "$GITHUB_REPOSITORY" '
+            (.cfo.shared_login_repos // [$current]) as $repos |
+            ($repos | type == "array" and length > 0 and index($current) != null and length == (unique | length)) and
+            all($repos[]; type == "string" and test("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"))
+          ' "$RUNNER_TEMP/prism.json" > /dev/null || { echo 'Invalid cfo.shared_login_repos' >&2; exit 1; }
+          while IFS= read -r repo; do
+            if ! gh api "repos/$repo/actions/secrets/public-key" > /dev/null; then
+              echo "Cannot read Actions secret public key for $repo" >&2; exit 1
+            fi
+            if ! gh secret set CFO_SECRET_WRITE_PREFLIGHT --repo "$repo" --body ok > /dev/null; then
+              echo "Cannot write Actions secrets for $repo" >&2; exit 1
+            fi
+          done < <(jq -r --arg current "$GITHUB_REPOSITORY" '.cfo.shared_login_repos // [$current] | .[]' "$RUNNER_TEMP/prism.json")
+      - uses: actions/checkout@v4
+        if: ${{ !inputs.preflight_only }}
+        with:
+          repository: Bhavya031/Prisme
+          ref: ${{ inputs.prisme_ref }}
+          path: prism
+          token: ${{ secrets.PRISME_READ_TOKEN || github.token }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        if: ${{ !inputs.preflight_only }}
+        with:
+          python-version: "3.12"
+      - name: Download the saved estimate; no discovery or model call
+        if: ${{ !inputs.preflight_only }}
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: |
+          [[ "$RUN_ID" =~ ^[0-9]+$ && "$ISSUE_NUMBER" =~ ^[0-9]+$ ]] || { echo 'run_id and issue_number must be numeric' >&2; exit 1; }
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "prism-estimate-$ISSUE_NUMBER" --dir "$RUNNER_TEMP/prism-estimate"
+          test -s "$RUNNER_TEMP/prism-estimate/estimate.json"
+          gh api -H 'Accept: application/vnd.github.raw' "repos/$GITHUB_REPOSITORY/contents/.github/prism.json" > "$RUNNER_TEMP/prism.json"
+      - name: Allocate in the synthetic CFO.ai tables and read back
+        id: allocation
+        if: ${{ !inputs.preflight_only }}
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          PYTHONPATH: ${{ github.workspace }}/prism/src
+        run: |
+          python -m prism.cfo_actions "$RUNNER_TEMP/prism-estimate/estimate.json" "$RUN_ID" \
+            --issue-number "$ISSUE_NUMBER" --config "$RUNNER_TEMP/prism.json" --output "$RUNNER_TEMP/cfo-allocation.json"
+      - name: Report budget allocation on the issue
+        if: always() && steps.allocation.outcome != 'skipped'
+        env:
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          REQUESTER: ${{ github.actor }}
+        run: |
+          if [ -s "$RUNNER_TEMP/cfo-allocation.json" ]; then
+            python - "$RUNNER_TEMP/cfo-allocation.json" > "$RUNNER_TEMP/cfo-allocation.md" <<'PY'
+          import json, os, sys
+          from decimal import Decimal, InvalidOperation
+          from html import escape
+
+          data = json.load(open(sys.argv[1]))
+          def number(value):
+              try:
+                  amount = Decimal(str(value))
+                  return amount if amount.is_finite() else None
+              except (InvalidOperation, TypeError):
+                  return None
+          def money(value):
+              return f"${value:,.2f}" if value is not None else "—"
+
+          budget = number(data.get("budget_usd"))
+          spent = number(data.get("spent_usd"))
+          reserved = number(data.get("reserved_before_usd"))
+          cap = number(data.get("usd_cap")) or Decimal(0)
+          available = number(data.get("available_usd"))
+          left = (number(data.get("available_balance_usd")) if data.get("already_recorded")
+                  else available - cap if available is not None else None)
+          maximum = number(data.get("request_limit_usd"))
+          status = data["decision"]
+          print(f"### Prism budget allocation: {status}\n")
+          print(f"Requested by @{os.environ['REQUESTER']}\n")
+          print("Automated estimation and allocation; decided by the budget rule saved in CFO.ai.\n")
+          if data.get("already_recorded"):
+              print("This request was already recorded; no new reservation was added.\n")
+          files = ", ".join("`" + escape(path, quote=False).replace("`", "'").replace("|", "/").replace("\n", " ").replace("\r", " ") + "`"
+                            for path in data.get("predicted_files", [])) or "none"
+          print(f"Predicted files: {files}\n")
+          print("| | USD |\n|---|---:|")
+          for label, value in (("Repository budget", budget), ("Spent so far", spent),
+                               ("Reserved before this request", reserved), ("This request (cap)", cap),
+                               ("Left after this request", left), ("Max per request", maximum)):
+              print(f"| {label} | {money(value)} |")
+          print(f"\nChosen model: `{data.get('chosen_model') or '—'}`")
+          print(f"\nReason: {data['reason']}")
+          print("\nSuggested models\n")
+          print("| Model | Estimated cost |\n|---|---:|")
+          for item in data.get("recommendations", []):
+              print(f"| {item['model']} | {money(number(item['usd']))} |")
+          print("\n<details><summary>Other models</summary>\n")
+          print("| Model | Estimated cost |\n|---|---:|")
+          for item in data.get("other_models", []):
+              print(f"| {item['model']} | {money(number(item['usd']))} |")
+          print("\n</details>")
+          print(f"\nRequest: `{data['request_id']}`")
+          PY
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/cfo-allocation.md" || echo 'Could not post budget allocation comment' >&2
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.allocation.outcome != 'skipped'
+        with:
+          name: prism-cfo-allocation-${{ inputs.run_id }}
+          path: ${{ runner.temp }}/cfo-allocation.json

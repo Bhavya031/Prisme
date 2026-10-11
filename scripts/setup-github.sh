@@ -36,14 +36,25 @@ for i in "${!keys[@]}"; do
   done
 done
 
+read -r -p "Shared CFO login repositories (comma-separated owner/repo, Enter for only $repo): " shared_repos
+if [[ -n $shared_repos ]]; then
+  IFS=, read -r -a shared_repo_list <<< "$shared_repos"
+  found_current=false
+  for shared_repo in "${shared_repo_list[@]}"; do
+    [[ $shared_repo =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "Invalid repository: $shared_repo" >&2; exit 1; }
+    [[ $shared_repo == "$repo" ]] && found_current=true
+  done
+  [[ $found_current == true ]] || { echo "Shared login list must include $repo" >&2; exit 1; }
+fi
+
 secrets=(ANTHROPIC_API_KEY NEATLOGS_API_KEY ENTIRE_TOKEN PRISME_READ_TOKEN CFO_OAUTH_CLIENT_ID CFO_OAUTH_REFRESH_TOKEN CFO_SECRET_WRITE_TOKEN)
 for name in "${secrets[@]}"; do
   label=$name
-  if [[ $name == NEATLOGS_API_KEY ]]; then label+=' (optional, Enter to skip)'; fi
+  if [[ $name == NEATLOGS_API_KEY || $name == PRISME_READ_TOKEN ]]; then label+=' (optional, Enter to skip)'; fi
   while :; do
     read -r -s -p "$label: " value
     printf '\n'
-    if [[ -n $value || $name == NEATLOGS_API_KEY ]]; then break; fi
+    if [[ -n $value || $name == NEATLOGS_API_KEY || $name == PRISME_READ_TOKEN ]]; then break; fi
     echo "$name is required." >&2
   done
   if [[ -n $value ]]; then
@@ -64,9 +75,17 @@ mkdir -p "$target/.github/workflows"
   for i in {0..6}; do
     printf '    "%s": ' "${keys[i]}"
     json_string "${values[i]}"
-    if (( i < 6 )); then printf ','; fi
+    if (( i < 6 )) || [[ -n $shared_repos ]]; then printf ','; fi
     printf '\n'
   done
+  if [[ -n $shared_repos ]]; then
+    printf '    "shared_login_repos": ['
+    for i in "${!shared_repo_list[@]}"; do
+      (( i == 0 )) || printf ', '
+      json_string "${shared_repo_list[i]}"
+    done
+    printf ']\n'
+  fi
   printf '  },\n  "estimate": {\n'
   for i in {7..13}; do
     printf '    "%s": ' "${keys[i]}"
