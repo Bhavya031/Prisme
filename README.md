@@ -43,7 +43,7 @@ flowchart TD
 
 ## Install
 
-Follow [the setup guide](docs/SETUP.md) or run [`bash scripts/setup-github.sh /path/to/your/repo`](scripts/setup-github.sh) from a Prisme checkout. The guide covers credentials, the ready Entire mirror, CFO.ai table shape, and the rotating CFO.ai refresh token. Commit and push the generated config and workflows to the target repository's default branch.
+Follow [the setup guide](docs/SETUP.md) or run [`bash scripts/setup-github.sh /path/to/your/repo`](scripts/setup-github.sh) from a Prisme checkout. Copy the small caller files [`examples/prism-estimate.yml`](examples/prism-estimate.yml) and [`examples/prism-cfo-allocation.yml`](examples/prism-cfo-allocation.yml) once to the target repository's `.github/workflows/`; their job logic runs from Prisme. Set the target repository's secrets and commit its `.github/prism.json` on the default branch. Prisme must be public for public forks to call its workflows.
 
 ## Configuration
 
@@ -52,7 +52,7 @@ The workflows read `.github/prism.json` from the target repository's default bra
 | Group | Keys |
 |---|---|
 | `estimate` | `cooldown_minutes`, `provider`, `worker_model`, `max_cost_usd`, `max_output_tokens`, `max_extra_rounds`, `timeout_seconds` control the estimate and its file-discovery limits. |
-| `cfo` | `org_id`, `scenario`, `page`, `budget_table`, `request_table`, `decision_table`, `column_prefix` name the CFO.ai tables and columns used for the rule result and reservation. |
+| `cfo` | `org_id`, `scenario`, `page`, `budget_table`, `request_table`, `decision_table`, `column_prefix` name the CFO.ai tables and columns used for the rule result and reservation. Optional `shared_login_repos` lists every `owner/repo` sharing one rotating login. |
 
 See [SETUP.md](docs/SETUP.md) for each field, secret, and required column. The optional Actions variable `PRISM_REPLAY_REF` pins a historical branch, tag, or commit; without it, the workflow uses the repository default branch.
 
@@ -70,7 +70,7 @@ Prism writes the repository name, issue URL, and projected **uncached input, cac
 - The low/central/high usage and cost projections use assumptions that have not been calibrated against a real coding-worker run. Model API charges for discovery can occur before a cost limit stops further calls.
 - Scope predicts existing files only. A live issue needs a ready Entire mirror; a missing or failed index stops the run. Selected context excludes files that are missing or not text at the pinned commit.
 - The example workflows estimate and reserve budget; they do not launch a solve worker. **Actual-spend report-back and reconciliation are not built into this workflow yet.**
-- CFO.ai refresh tokens rotate. The workflows check secret-write access before refresh and serialize allocation runs; keep that concurrency group when copying them.
+- CFO.ai refresh tokens rotate. Put the same `CFO_OAUTH_CLIENT_ID`, `CFO_OAUTH_REFRESH_TOKEN`, and `CFO_SECRET_WRITE_TOKEN` in each repository sharing a login, and list all repositories in each `.github/prism.json`. Run only one allocation at a time across them; workflow concurrency applies within one repository only.
 
 ## Sponsors
 

@@ -31,8 +31,18 @@ def github_repository():
     return repository
 
 
-def refresh_access_token():
+def shared_login_repos():
     repository = github_repository()
+    repos = CFO.get("shared_login_repos", [repository])
+    if (not isinstance(repos, list) or not repos
+            or any(not isinstance(repo, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo) for repo in repos)
+            or repository not in repos or len(repos) != len(set(repos))):
+        raise RuntimeError("cfo.shared_login_repos must list unique owner/repo names including this repository")
+    return repos
+
+
+def refresh_access_token():
+    repositories = shared_login_repos()
     client_id = os.environ.get("CFO_OAUTH_CLIENT_ID")
     refresh_token = os.environ.get("CFO_OAUTH_REFRESH_TOKEN")
     writer = os.environ.get("CFO_SECRET_WRITE_TOKEN")
@@ -40,14 +50,14 @@ def refresh_access_token():
         raise RuntimeError("CFO_OAUTH_CLIENT_ID, CFO_OAUTH_REFRESH_TOKEN, and CFO_SECRET_WRITE_TOKEN are required")
     env = os.environ.copy()
     env["GH_TOKEN"] = writer
-    # Prove secret writes work before rotating the only stored refresh token.
-    preflight = subprocess.run(
-        ["gh", "secret", "set", "CFO_SECRET_WRITE_TOKEN", "--repo", repository],
-        input=writer, text=True, capture_output=True, env=env,
-    )
-    if preflight.returncode:
-        detail = preflight.stderr.strip() if preflight.stderr else f"gh exit {preflight.returncode}"
-        raise RuntimeError(f"CFO secret-write token cannot update {repository} Actions secrets; OAuth refresh was not attempted: {detail}")
+    # Prove writes to every repository before rotating the only stored refresh token.
+    for repository in repositories:
+        preflight = subprocess.run(
+            ["gh", "secret", "set", "CFO_SECRET_WRITE_TOKEN", "--repo", repository],
+            input=writer, text=True, capture_output=True, env=env,
+        )
+        if preflight.returncode:
+            raise RuntimeError(f"CFO secret-write token cannot update {repository} Actions secrets; OAuth refresh was not attempted (gh exit {preflight.returncode})")
     payload = urllib.parse.urlencode({
         "grant_type": "refresh_token", "client_id": client_id, "refresh_token": refresh_token,
     }).encode()
@@ -63,16 +73,18 @@ def refresh_access_token():
         raise RuntimeError(f"CFO OAuth refresh failed: {reason}; browser authorization may be required") from None
     if not result.get("access_token") or not result.get("refresh_token"):
         raise RuntimeError("CFO OAuth refresh returned no access or refresh token")
-    # Refresh tokens rotate; persist the replacement before using the access token.
-    for attempt in range(3):
-        saved = subprocess.run(
-            ["gh", "secret", "set", "CFO_OAUTH_REFRESH_TOKEN", "--repo", repository],
-            input=result["refresh_token"], text=True, capture_output=True, env=env,
-        )
-        if saved.returncode == 0:
-            return result["access_token"]
-    detail = saved.stderr.strip() if saved.stderr else f"gh exit {saved.returncode}"
-    raise RuntimeError(f"CFO refresh succeeded but the rotated credential could not be saved to {repository} Actions secrets; reauthorization may be required: {detail}")
+    # shortcut: cross-repository runs can race, schedule one at a time until a shared lock exists.
+    for repository in repositories:
+        for attempt in range(3):
+            saved = subprocess.run(
+                ["gh", "secret", "set", "CFO_OAUTH_REFRESH_TOKEN", "--repo", repository],
+                input=result["refresh_token"], text=True, capture_output=True, env=env,
+            )
+            if saved.returncode == 0:
+                break
+        else:
+            raise RuntimeError(f"CFO refresh succeeded but the rotated credential could not be saved to {repository} Actions secrets; repositories may now hold different tokens; reauthorization may be required (gh exit {saved.returncode})")
+    return result["access_token"]
 
 
 def mcp(access_token, method, params, request_id):
@@ -288,6 +300,7 @@ def main():
         missing = [key for key in CFO_KEYS if not isinstance(CFO.get(key), str) or not CFO[key]]
         if missing:
             raise RuntimeError(f"{args.config} needs a non-empty string for cfo." + ", cfo.".join(missing))
+        shared_login_repos()
         result = allocate(args.estimate_json, args.run_id, args.issue_number)
         Path(args.output).write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps(result))
