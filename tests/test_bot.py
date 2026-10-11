@@ -166,6 +166,47 @@ class BotTests(unittest.TestCase):
         self.assertIn("go install github.com/entireio/cli/cmd/entire@v0.11.4", run)
         self.assertLess(run.index('export PATH="$GOBIN:$PATH"'), run.index("from prism.entire import ensure_ready"))
 
+    def test_template_pins_a_prism_commit_that_has_the_search_option(self):
+        workflow = (Path(__file__).parents[1] / "examples/prism-estimate.yml").read_text()
+        pin = workflow.split("PRISM_COMMIT: ", 1)[1].split()[0]
+        self.assertIn(pin, (Path(__file__).parents[1] / "docs/install-github-estimate.md").read_text())
+        shown = subprocess.run(["git", "-C", str(Path(__file__).parents[1]), "show", f"{pin}:src/prism/cli.py"],
+                               capture_output=True, text=True)
+        if shown.returncode:
+            self.skipTest("the pinned commit is not in this checkout")
+        self.assertIn('"--search"', shown.stdout)
+
+    def test_template_installs_the_pinned_glance_release_only_after_its_checksum_matches(self):
+        workflow = (Path(__file__).parents[1] / "examples/prism-estimate.yml").read_text()
+        self.assertIn("GLANCE_VERSION: v0.1.0", workflow)
+        for gone in ("GLANCE_COMMIT", "GLANCE_READ_TOKEN", "Bhavya031/Glance/cmd/glance"):
+            self.assertNotIn(gone, workflow)
+        start = workflow.index('          case "$(uname -m)"')
+        script = "\n".join(line[10:] for line in workflow[start:workflow.index("          python -c", start)].splitlines())
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "release").mkdir()
+            (root / "glance").write_text("#!/bin/sh\n")
+            # A stand-in for curl that serves the release directory; it fails when a file is missing.
+            (root / "curl").write_text('#!/bin/sh\nfor arg; do case "$arg" in https://*) '
+                                       'cp "$RELEASE/${arg##*/}" . || exit 22 ;; esac; done\n')
+            (root / "curl").chmod(0o755)
+            env = os.environ | {"PATH": f"{root}:{os.environ['PATH']}", "RELEASE": str(root / "release"),
+                                "GLANCE_VERSION": "v0.1.0", "RUNNER_TEMP": str(root / "temp"), "GOBIN": str(root / "bin")}
+            (root / "temp").mkdir()
+            arch = subprocess.check_output(["bash", "-c", script.split("\n")[0] + '; echo "$glance_arch"'], text=True).strip()
+            archive = f"Glance_0.1.0_linux_{arch}.tar.gz"
+            for sums, installed in ((None, False), ("0" * 64, False), ("real", True)):
+                subprocess.run(["tar", "-czf", str(root / "release" / archive), "-C", folder, "glance"], check=True)
+                if sums == "real":
+                    sums = subprocess.check_output(["sha256sum", str(root / "release" / archive)], text=True).split()[0]
+                if sums:
+                    (root / "release/checksums.txt").write_text(f"{sums}  {archive}\n")
+                result = subprocess.run(["bash", "-euo", "pipefail", "-c", script], env=env, capture_output=True, text=True)
+                self.assertEqual((result.returncode == 0, (root / "bin/glance").exists()), (installed, installed), result.stderr)
+                if not installed:
+                    self.assertIn(f"Glance v0.1.0 download or sha256 check failed for {archive}", result.stderr)
+
     def test_template_searches_entire_for_live_issues_and_git_for_replays(self):
         workflow = (Path(__file__).parents[1] / "examples/prism-estimate.yml").read_text()
         choice = 'search=entire\n          if [ -n "$REPLAY_REF" ]; then search=git; fi\n'
