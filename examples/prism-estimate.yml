@@ -57,7 +57,8 @@ jobs:
         if: steps.gate.outputs.note != ''
         env:
           NOTE: ${{ steps.gate.outputs.note }}
-        run: printf '%s\n' "$NOTE"
+        # This reply has no Prism marker, so it cannot extend the cooldown or replace an estimate.
+        run: gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$NOTE"
       - name: Reserve this issue before any paid call
         if: steps.gate.outputs.note == ''
         run: |

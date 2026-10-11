@@ -75,6 +75,19 @@ class BotTests(unittest.TestCase):
         self.assertIn("04:05 UTC", bot.gate(event(), fetch, NOW))
         self.assertIn("page=2", fetch.call_args.args[0])
 
+    def test_cooldown_reply_does_not_reset_reservation_or_replace_estimate(self):
+        reservation = {"user": {"login": bot.BOT_LOGIN}, "body": bot.MARKER + "\nEstimating",
+                       "updated_at": "2026-10-11T03:55:00Z"}
+        reply = {"user": {"login": bot.BOT_LOGIN}, "body": "Try again after 04:05 UTC",
+                 "updated_at": "2026-10-11T03:59:00Z"}
+        self.assertFalse(bot.is_ours(reply))
+        self.assertEqual(bot.retry_after([reservation, reply], NOW).strftime("%H:%M"), "04:05")
+        self.assertIsNone(bot.retry_after([reply], NOW))
+        workflow = (Path(__file__).parents[1] / "examples/prism-estimate.yml").read_text()
+        cooldown = workflow.split("      - name: Report repository cooldown\n", 1)[1].split("      - name:", 1)[0]
+        self.assertIn('gh issue comment "$ISSUE_NUMBER"', cooldown)
+        self.assertNotIn(bot.MARKER, cooldown)
+
     def test_saved_estimate_table_and_saved_prediction_spend(self):
         saved = json.loads((FIXTURES / "estimate-sympy-20590.json").read_text())["estimate"]
         prediction = json.loads((FIXTURES / "predict-httpx-2788.json").read_text())
@@ -178,7 +191,7 @@ class BotTests(unittest.TestCase):
             build.assert_not_called()
 
     def test_workflow_resolves_default_and_historical_refs_once(self):
-        workflow = (Path(__file__).parents[1] / ".github/workflows/prism-estimate.yml").read_text()
+        workflow = (Path(__file__).parents[1] / "examples/prism-estimate.yml").read_text()
         section = workflow.split("      - name: Resolve one immutable source commit\n", 1)[1]
         block = section.split("        run: |\n", 1)[1].split("      - uses:", 1)[0]
         script = "\n".join(line.removeprefix("          ") for line in block.splitlines())
