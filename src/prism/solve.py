@@ -6,6 +6,7 @@ No default or multiplier in this module has been checked against a real coding-w
 
 import asyncio
 import copy
+import json
 import math
 from dataclasses import asdict
 
@@ -71,6 +72,9 @@ PLAN_INSTRUCTION = (
     "file, one short sentence each), the tests that would have to be added or run, your best count of changed lines, and "
     "grade as low, medium or high: the investigation effort before the first edit, the risk that a first attempt fails "
     "and must be redone, and your overall uncertainty. Keep the rationale under 80 words.\n\n")
+# Glance counts with an OpenAI encoding; the planner bills by its own tokenizer. One live call billed 1.72x Glance's
+# count of the files sent, so the pre-call cost check doubles the counted request. An assumption, not a measurement.
+PLANNER_TOKENIZER_SAFETY = 2.0
 TRUNCATION_MARK = "\n[... truncated for the planning call ...]"
 
 
@@ -269,7 +273,7 @@ async def _planning_call(provider: str, prompt: str, max_output_tokens: int):
         await models.close()
 
 
-def plan(issue_text: str, files: dict, measure, *, provider: str = "claude", max_input_tokens: int = 15_000,
+def plan(issue_text: str, files: dict, measure, *, provider: str = "claude", max_input_tokens: int = 8000,
          max_output_tokens: int = 1500, max_cost_usd: float = 0.05, call=None) -> tuple[dict, dict, dict]:
     """One bounded planning call. Returns the assessment, the call's actual cost, and how the call was bounded."""
     if provider not in models.PRICES:
@@ -277,12 +281,16 @@ def plan(issue_text: str, files: dict, measure, *, provider: str = "claude", max
     if min(max_input_tokens, max_output_tokens) < 1 or max_cost_usd <= 0:
         raise ValueError("Planner limits must be positive")
     sent, context_tokens, truncated = bounded_files(issue_text, files, max_input_tokens, measure)
-    price = models.PRICES[provider]
-    worst = (context_tokens * price["input"] + max_output_tokens * price["output"]) / price["per"]
-    if worst > max_cost_usd:
-        raise ValueError(f"Planning call could cost about ${worst:.4f}, above --planner-max-cost-usd {max_cost_usd:g}; "
-                         "lower --planner-max-input-tokens or raise the limit. No call was made.")
     prompt = PLAN_INSTRUCTION + glance.assemble(issue_text, sent)
+    # Everything the provider bills as input: system prompt, output schema and the whole prompt.
+    request_tokens = measure(PLAN_SYSTEM + "\n" + json.dumps(ASSESSMENT_SCHEMA) + "\n" + prompt)["context_tokens"]
+    price = models.PRICES[provider]
+    worst = (request_tokens * PLANNER_TOKENIZER_SAFETY * price["input"] + max_output_tokens * price["output"]) / price["per"]
+    if worst > max_cost_usd:
+        raise ValueError(f"Planning call could cost about ${worst:.4f} (request counted at {request_tokens} tokens, "
+                         f"x{PLANNER_TOKENIZER_SAFETY:g} for the planner's own tokenizer, plus {max_output_tokens} output "
+                         f"tokens), above --planner-max-cost-usd {max_cost_usd:g}; lower --planner-max-input-tokens or "
+                         "raise the limit. No call was made.")
     try:
         assessment, usage = (call or (lambda *args: asyncio.run(_planning_call(*args))))(provider, prompt, max_output_tokens)
     except models.BilledError as error:
@@ -293,7 +301,12 @@ def plan(issue_text: str, files: dict, measure, *, provider: str = "claude", max
               "cost_basis": "actual token usage of the planning call priced at list prices; not a billed amount"}
     bounds = {"max_input_tokens": max_input_tokens, "max_output_tokens": max_output_tokens, "max_cost_usd": max_cost_usd,
               "context_tokens_sent": context_tokens, "context_truncated": truncated,
-              "note": "Input bound is checked on Glance's count, which can differ from the planner model's own tokenizer."}
+              "request_tokens_counted": request_tokens, "tokenizer_safety_factor": PLANNER_TOKENIZER_SAFETY,
+              "pre_call_cost_ceiling_usd": round(worst, 6),
+              "note": "max_input_tokens limits the Glance count of the issue and files sent. max_cost_usd is checked before "
+                      "the call against a conservative estimate: Glance's count of the whole request times the safety "
+                      "factor, plus the full output cap. Only the output cap is enforced by the provider; the planner "
+                      "model's own tokenizer decides the billed input."}
     return assessment, actual, bounds
 
 
@@ -347,9 +360,11 @@ def estimate(*, issue_text: str, files: dict, commit: str, worker_model: str, pe
             "reasoning": "Output tokens include reasoning where the provider bills it as output; it is not counted again.",
             "pricing": pricing,
             "measurement": {
-                "tool": "glance estimate --json", **{key: value for key, value in measurement.items() if key != "context_tokens"},
-                "includes": "issue text, each selected file's path, separators and full contents at repository_commit, "
-                            "plus about 10 tokens of Glance's own wrapper",
+                "label": "measured selected-context tokens: a count of the selected starting context, not a prediction "
+                         "of total solve tokens",
+                "tool": "glance estimate --json <directory holding the one bundle file>", **measurement,
+                "includes": "issue text, each included file's path, separators and full contents at repository_commit, "
+                            "plus Glance's fixed frame (see glance_wrapper)",
                 "note": "Counted with the named encoding; the worker model's own tokenizer can count differently.",
                 **(sources or {}),
             },

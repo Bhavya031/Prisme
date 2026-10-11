@@ -83,9 +83,12 @@ def parser() -> argparse.ArgumentParser:
     solve.add_argument("--glance", help="path to the Glance binary (default: PRISM_GLANCE, then `glance` on PATH)")
     solve.add_argument("--encoding", choices=("o200k_base", "cl100k_base"), default="o200k_base")
     solve.add_argument("--planner-provider", choices=("claude", "openai"), default="claude")
-    solve.add_argument("--planner-max-input-tokens", type=int, default=15_000)
-    solve.add_argument("--planner-max-output-tokens", type=int, default=1500)
-    solve.add_argument("--planner-max-cost-usd", type=float, default=0.05)
+    solve.add_argument("--planner-max-input-tokens", type=int, default=8000,
+                       help="limit on Glance's count of the issue and files sent to the planner; files are cut to fit")
+    solve.add_argument("--planner-max-output-tokens", type=int, default=1500, help="output cap enforced by the provider")
+    solve.add_argument("--planner-max-cost-usd", type=float, default=0.05,
+                       help="refuse the call when a conservative pre-call estimate (counted request x2, plus the full "
+                            "output cap) exceeds this; an estimate, not a provider-enforced cap")
     solve.add_argument("--save", type=Path, help="also save this as the pre-run estimate; never overwrites")
     solve.add_argument("--task-id", help="task name stored with --save (default: the SWE-bench instance id)")
 
@@ -236,7 +239,9 @@ def _solve_estimate(args) -> dict:
                                              _read_json(args.catalog) if args.catalog else None)
     binary = glance.locate(args.glance)
     commit = glance.resolve_commit(commit, args.checkout)
-    files = glance.read_files(paths, commit, checkout=args.checkout, github_repo=github_repo)
+    files, excluded = glance.read_files(paths, commit, checkout=args.checkout, github_repo=github_repo)
+    for item in excluded:
+        print(f"excluded from the measured context: {item['path']} ({item['reason']})", file=sys.stderr)
     if instance is not None:
         # Before any model call, so hidden material cannot reach the planner.
         swebench.leak_check(instance, commit=commit, files=files, texts={"issue_text": issue_text})
@@ -247,11 +252,13 @@ def _solve_estimate(args) -> dict:
         assumed=assumed, discovery=discovery, mode=args.mode.replace("-", "_"),
         planner={"provider": args.planner_provider, "max_input_tokens": args.planner_max_input_tokens,
                  "max_output_tokens": args.planner_max_output_tokens, "max_cost_usd": args.planner_max_cost_usd},
-        sources={"issue_source": issue_source, "file_selection": selection, "files": list(files),
+        sources={"issue_source": issue_source, "file_selection": selection, "included_paths": list(files),
+                 "excluded_paths": excluded,
+                 "glance_wrapper": glance.wrapper(glance=binary, encoding=args.encoding),
                  "content_source": f"git objects in {args.checkout}" if args.checkout else f"GitHub API, {github_repo}"})
     if instance is not None:
         estimate["assumptions"]["leak_check"] = swebench.leak_check(
-            instance, commit=commit, files=files, texts={"issue_text": issue_text, "estimate": json.dumps(estimate)})
+            instance, commit=commit, files=files, texts={"issue_text": issue_text, "estimate": estimate})
     if args.save:
         task_id = args.task_id or (instance or {}).get("instance_id")
         if not task_id:
@@ -278,12 +285,14 @@ def _solve(args) -> None:
                 verified_outcome=args.verified_outcome, worker_model=args.worker_model,
                 uncached_input=args.uncached_input, cached_input=args.cached_input, cache_write=args.cache_write,
                 output=args.output, billed_usd=args.billed_usd, usage_source=args.usage_source, notes=args.notes)
-            if args.glance_records:
-                validation.mirror_to_glance(result, glance.locate(args.glance), args.glance_records)
             if args.out:
                 from . import results
 
+                # Before the Glance append, so a failed write cannot leave a Glance row that a retry would duplicate.
+                args.out.parent.mkdir(parents=True, exist_ok=True)
                 results.write_json(args.out, result)
+            if args.glance_records:
+                validation.mirror_to_glance(result, glance.locate(args.glance), args.glance_records)
     except (OSError, ValueError, KeyError, RuntimeError) as error:
         raise SystemExit(f"prism {args.command}: {type(error).__name__}: {error}") from None
     print(json.dumps(result, indent=2))

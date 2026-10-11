@@ -49,11 +49,23 @@ def _added(diff: str) -> tuple[list[str], list[str], list[str]]:
     return lines, blocks, created
 
 
+def _strings(value) -> list[str]:
+    """Every string inside a JSON-like value, keys included, as written rather than as JSON would escape it."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [text for key, item in value.items() for text in (*_strings(key), *_strings(item))]
+    if isinstance(value, (list, tuple)):
+        return [text for item in value for text in _strings(item)]
+    return []
+
+
 def leak_check(instance: dict, *, commit: str, files: dict[str, str], texts: dict[str, str]) -> dict:
     """Raise LeakError unless the estimator's inputs and outputs are free of the hidden fields.
 
     `files` are the selected repository files as read at `commit`; `texts` is everything else that is sent or
-    saved (issue text, prompt framing, the estimate JSON). Repository files legitimately share single lines
+    saved (issue text, prompt framing, the estimate). A dict or list is checked string by string, because JSON
+    escaping would hide quotes and newlines. Repository files legitimately share single lines
     with the gold patch, so they are checked for whole added blocks and created paths, and the commit is pinned.
     """
     if commit != instance["base_commit"]:
@@ -75,7 +87,9 @@ def leak_check(instance: dict, *, commit: str, files: dict[str, str], texts: dic
     for path, content in files.items():
         if any(block in content for block in blocks):
             raise LeakError(f"{path} contains a block added by the gold or test patch; it was not read at the base commit")
-    for name, text in texts.items():
+    for name, value in texts.items():
+        serialized = value if isinstance(value, str) else json.dumps(value)
+        text = value if isinstance(value, str) else "\n".join(_strings(value))
         for label, markers in (("a gold or test patch line", lines), ("a gold or test patch block", blocks),
                                ("an evaluator test id", test_ids)):
             if any(marker in text for marker in markers):
@@ -83,7 +97,7 @@ def leak_check(instance: dict, *, commit: str, files: dict[str, str], texts: dic
         hint = (instance.get("hints_text") or "").strip()
         if len(hint) >= _MIN_BLOCK and hint not in problem and hint in text:
             raise LeakError(f"{name} contains the withheld hints_text")
-        if re.search(r'"(?:test_patch|FAIL_TO_PASS|PASS_TO_PASS)"\s*:', text):
+        if re.search(r'"(?:test_patch|FAIL_TO_PASS|PASS_TO_PASS)"\s*:', serialized):
             raise LeakError(f"{name} carries a hidden SWE-bench field")
     return {"status": "passed", "instance_id": instance["instance_id"], "commit": commit,
             "hidden_fields_withheld": list(HIDDEN), "checked_texts": sorted(texts), "checked_files": sorted(files),

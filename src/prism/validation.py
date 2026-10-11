@@ -95,6 +95,10 @@ def record_run(saved: dict, *, started_at: str, run_status: str, verified_outcom
                                  "actual tokens priced at the estimate's list prices; not a billed amount",
                         "list_price_usd": round(list_price, 6)},
         "outcome_class": outcome_class,
+        "context_measurement": {"repository_commit": estimate["repository_commit"],
+                                "measured_context_tokens": estimate["measured_context_tokens"],
+                                **{key: estimate["assumptions"]["measurement"].get(key) for key in (
+                                    "encoding", "bundle_sha256", "bundle_bytes", "included_paths", "excluded_paths")}},
         "estimate": {"solve_token_estimate": estimate["solve_token_estimate"],
                      "solve_cost_estimate": estimate["solve_cost_estimate"]},
     }

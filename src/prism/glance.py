@@ -6,6 +6,7 @@ at the commit, writes issue text, paths, separators and contents into one bundle
 """
 
 import base64
+import hashlib
 import json
 import os
 import re
@@ -59,43 +60,56 @@ def resolve_commit(commit: str, checkout: str | Path | None = None) -> str:
     return result.stdout.strip()
 
 
-def _text(raw: bytes, path: str) -> str:
+class _Excluded(Exception):
+    """A selected path that cannot be part of the measured context; the message is the reason."""
+
+
+def _text(raw: bytes) -> str:
     try:
         return raw.decode()
     except UnicodeDecodeError:
-        raise ValueError(f"Selected file is not UTF-8 text and cannot be counted: {path}") from None
+        raise _Excluded("not UTF-8 text") from None
+
+
+def _read(path: str, commit: str, checkout, github_repo, fetch) -> str:
+    if checkout is not None:
+        # Reads the blob from the object store; the working tree is neither used nor changed.
+        result = subprocess.run(["git", "-C", str(checkout), "show", f"{commit}:{path}"], capture_output=True, timeout=60)
+        if result.returncode:
+            raise _Excluded("missing at the recorded commit")
+        return _text(result.stdout)
+    try:
+        item = fetch(f"repos/{github_repo}/contents/{urllib.parse.quote(path)}?ref={commit}")
+        if isinstance(item, list) or item.get("type") != "file":
+            raise _Excluded("not a regular file at the recorded commit")
+        if not item.get("content") and item.get("size"):
+            # The contents API omits bodies over 1 MB; the blob API returns them.
+            item = fetch(f"repos/{github_repo}/git/blobs/{item['sha']}")
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            raise _Excluded("missing at the recorded commit") from None
+        raise
+    return _text(base64.b64decode(item["content"]))
 
 
 def read_files(paths: list[str], commit: str, *, checkout: str | Path | None = None,
-               github_repo: str | None = None, fetch=None) -> dict[str, str]:
-    """Contents of each path at `commit`, from a local checkout's object store or the GitHub API."""
+               github_repo: str | None = None, fetch=None) -> tuple[dict[str, str], list[dict]]:
+    """Contents of every path at the one `commit`, plus the paths left out and why.
+
+    A path that is missing or is not text is reported as excluded, never counted by name alone.
+    """
     if (checkout is None) == (github_repo is None):
         raise ValueError("Give exactly one source for file contents: --checkout or --github-repo")
-    if not paths:
-        raise ValueError("No files selected; file names alone are not a context measurement")
-    files = {}
+    files, excluded = {}, []
     for path in dict.fromkeys(paths):
-        if checkout is not None:
-            # Reads the blob from the object store; the working tree is neither used nor changed.
-            result = subprocess.run(["git", "-C", str(checkout), "show", f"{commit}:{path}"], capture_output=True, timeout=60)
-            if result.returncode:
-                raise ValueError(f"{path} does not exist at commit {commit}")
-            files[path] = _text(result.stdout, path)
-            continue
-        fetch = fetch or github_context.api_v2
         try:
-            item = fetch(f"repos/{github_repo}/contents/{urllib.parse.quote(path)}?ref={commit}")
-            if isinstance(item, list) or item.get("type") != "file":
-                raise ValueError(f"{path} is not a file at commit {commit}")
-            if not item.get("content") and item.get("size"):
-                # The contents API omits bodies over 1 MB; the blob API returns them.
-                item = fetch(f"repos/{github_repo}/git/blobs/{item['sha']}")
-        except urllib.error.HTTPError as error:
-            if error.code == 404:
-                raise ValueError(f"{path} does not exist in {github_repo} at commit {commit}") from None
-            raise
-        files[path] = _text(base64.b64decode(item["content"]), path)
-    return files
+            files[path] = _read(path, commit, checkout, github_repo, fetch or github_context.api_v2)
+        except _Excluded as reason:
+            excluded.append({"path": path, "reason": str(reason)})
+    if not files:
+        raise ValueError("No selected file could be read at commit " + commit + "; file names alone are not a context "
+                         "measurement" + "".join(f"; {item['path']}: {item['reason']}" for item in excluded))
+    return files, excluded
 
 
 def assemble(issue_text: str, files: dict[str, str]) -> str:
@@ -135,15 +149,28 @@ def measure(text: str, *, glance: str, encoding: str = "o200k_base", run=subproc
         tokens = data["context_tokens"]
     except (json.JSONDecodeError, KeyError, TypeError):
         raise GlanceError("Glance returned output Prism cannot read; expected `glance estimate --json` schema 2") from None
-    if selected != [BUNDLE] or data.get("excluded_files") or data.get("truncated") or not isinstance(tokens, int) or tokens <= 0:
+    # Glance must have read every byte of the one bundle and nothing else, or the count is not of what Prism sent.
+    if (selected != [BUNDLE] or data.get("excluded_files") or data.get("truncated") or data.get("scanned_files") != 1
+            or data.get("scanned_bytes") != size or data.get("encoding") != encoding
+            or isinstance(tokens, bool) or not isinstance(tokens, int) or tokens <= 0):
         raise GlanceError(f"Glance did not measure the whole context bundle (selected {selected}, "
-                          f"excluded {data.get('excluded_files')}, truncated {data.get('truncated')})")
+                          f"excluded {data.get('excluded_files')}, truncated {data.get('truncated')}, scanned "
+                          f"{data.get('scanned_files')} file(s) and {data.get('scanned_bytes')} of {size} bytes, "
+                          f"encoding {data.get('encoding')})")
     return {
         "context_tokens": tokens,
-        "encoding": data.get("encoding", encoding),
+        "encoding": encoding,
         "glance_schema_version": data.get("schema_version"),
-        "context_bytes": size,
+        "bundle_bytes": size,
+        "bundle_sha256": hashlib.sha256(text.encode()).hexdigest(),
         # Glance's standard-profile whole-run range, kept for reference only; Prism's estimate does not use it.
         "glance_profile_range_not_used": {"input_tokens": data.get("estimated_input_tokens"),
                                           "output_tokens": data.get("estimated_output_tokens")},
     }
+
+
+def wrapper(*, glance: str, encoding: str = "o200k_base", run=subprocess.run) -> dict:
+    """What `glance estimate` puts around the bundle, sized by measuring an empty bundle."""
+    return {"text_before": f"Instructions:\n\n\nFile: {BUNDLE}\n---\n", "text_after": "\n---\n\n",
+            "tokens_for_empty_bundle": measure("", glance=glance, encoding=encoding, run=run)["context_tokens"],
+            "note": "Glance adds this fixed frame to every count; it is included in the measured tokens, not subtracted."}

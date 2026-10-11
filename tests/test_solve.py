@@ -5,6 +5,7 @@ matches what a coding worker really spends; only a recorded worker run can show 
 """
 
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -191,6 +192,25 @@ class ModeTests(unittest.TestCase):
         self.assertLessEqual(fake_measure(prompts[0])["context_tokens"], 2100)
         self.assertIn(solve.TRUNCATION_MARK, prompts[0])
 
+    def test_cost_check_counts_the_whole_request_with_a_tokenizer_margin(self):
+        # The live call that prompted this: Glance counted 7868 tokens of files, the provider billed 13555 input.
+        counted = lambda text: {"context_tokens": 7868 if text.startswith("Issue:") else 8300}
+        with self.assertRaisesRegex(ValueError, r"about \$0\.0482 \(request counted at 8300 tokens, x2 .*No call was made"):
+            solve.plan("issue", {"a.py": "x"}, counted, max_cost_usd=0.04, call=mock.Mock(side_effect=AssertionError))
+        usage = Usage(input=13555, output=1500, cached_input=0, cache_write=0, reasoning=None)
+        _, actual, bounds = solve.plan("issue", {"a.py": "x"}, counted, call=lambda *args: (ASSESSMENT, usage))
+        self.assertEqual((bounds["request_tokens_counted"], bounds["tokenizer_safety_factor"]), (8300, 2.0))
+        # Even with every output token used, that call stays under the ceiling the check computed.
+        self.assertLess(actual["usd"], bounds["pre_call_cost_ceiling_usd"])
+        self.assertIn("Only the output cap is enforced by the provider", bounds["note"])
+        # The counted request holds the system prompt and schema as well as the prompt.
+        seen = []
+        solve.plan("issue", {"a.py": "x"}, lambda text: seen.append(text) or fake_measure(text),
+                   call=lambda *args: (ASSESSMENT, usage))
+        self.assertTrue(seen[-1].startswith(solve.PLAN_SYSTEM))
+        self.assertIn('"investigation_effort"', seen[-1])
+        self.assertIn(solve.PLAN_INSTRUCTION, seen[-1])
+
     def test_failed_planning_call_reports_its_spend_and_bad_assessments_are_refused(self):
         def billed(*args):
             raise models.Truncated("cut off", Usage(input=1000, output=100, cached_input=0, cache_write=0, reasoning=None))
@@ -290,12 +310,13 @@ class GlanceTests(unittest.TestCase):
         return glance.measure(text, glance="/bin/glance", run=run), seen
 
     def test_measure_gives_glance_exactly_the_bundle_and_reads_its_count(self):
-        payload = {"schema_version": "2", "encoding": "o200k_base", "context_tokens": 4321,
-                   "selected_files": [{"path": glance.BUNDLE, "score": 0}], "excluded_files": [], "truncated": False,
-                   "estimated_input_tokens": {"low": 1, "central": 2, "high": 3}}
         big = "x" * (3 << 20)
+        payload = {"schema_version": "2", "encoding": "o200k_base", "context_tokens": 4321, "scanned_files": 1,
+                   "scanned_bytes": len(big), "selected_files": [{"path": glance.BUNDLE, "score": 0}], "excluded_files": [],
+                   "truncated": False, "estimated_input_tokens": {"low": 1, "central": 2, "high": 3}}
         measured, seen = self.run_measure(payload, text=big)
-        self.assertEqual((measured["context_tokens"], measured["encoding"], measured["context_bytes"]), (4321, "o200k_base", 3 << 20))
+        self.assertEqual((measured["context_tokens"], measured["encoding"], measured["bundle_bytes"]), (4321, "o200k_base", 3 << 20))
+        self.assertEqual(measured["bundle_sha256"], hashlib.sha256(big.encode()).hexdigest())
         self.assertEqual((seen["bundle"], seen["files"]), (big, [glance.BUNDLE]))
         self.assertEqual(seen["command"][:5], ["/bin/glance", "estimate", "--json", "--encoding", "o200k_base"])
         # No issue or repo is passed, so Glance has nothing to fetch; its limits are raised to fit the one bundle.
@@ -304,8 +325,13 @@ class GlanceTests(unittest.TestCase):
         self.assertIn("GLANCE_RECORDS", seen["env"])
 
     def test_measure_refuses_anything_but_a_full_count_of_the_bundle(self):
-        good = {"context_tokens": 5, "selected_files": [{"path": glance.BUNDLE}], "excluded_files": [], "truncated": False}
+        good = {"context_tokens": 5, "selected_files": [{"path": glance.BUNDLE}], "excluded_files": [], "truncated": False,
+                "scanned_files": 1, "scanned_bytes": len("context"), "encoding": "o200k_base"}
+        self.assertEqual(self.run_measure(good)[0]["context_tokens"], 5)
+        # Fewer bytes scanned than sent, a second file, or another encoding: not a count of the whole bundle.
         for payload in (good | {"selected_files": []}, good | {"selected_files": [{"path": "other.py"}]},
+                        good | {"scanned_bytes": 3}, good | {"scanned_files": 2}, good | {"encoding": "cl100k_base"},
+                        good | {"context_tokens": True},
                         good | {"excluded_files": [{"path": glance.BUNDLE, "reason": "exceeds max_file_bytes"}]},
                         good | {"truncated": True}, good | {"context_tokens": 0}, {"unexpected": True}):
             with self.assertRaises(glance.GlanceError):
@@ -330,15 +356,23 @@ class GlanceTests(unittest.TestCase):
             git("commit", "-q", "-am", "two")
             Path(folder, "a.py").write_text("uncommitted = 3\n")
             self.assertEqual(glance.resolve_commit(first[:10], folder), first)
-            self.assertEqual(glance.read_files(["a.py"], first, checkout=folder), {"a.py": "old = 1\n"})
-            with self.assertRaisesRegex(ValueError, "does not exist at commit"):
+            Path(folder, "blob.bin").write_bytes(b"\xff\xfe\x00")
+            git("add", "blob.bin")
+            git("commit", "-q", "-m", "three")
+            third = git("rev-parse", "HEAD")
+            self.assertEqual(glance.read_files(["a.py"], first, checkout=folder), ({"a.py": "old = 1\n"}, []))
+            # Missing and non-text paths are reported, each with its reason, and every file comes from the one commit.
+            self.assertEqual(glance.read_files(["a.py", "missing.py", "blob.bin", "a.py"], third, checkout=folder),
+                             ({"a.py": "new = 2\n"}, [{"path": "missing.py", "reason": "missing at the recorded commit"},
+                                                      {"path": "blob.bin", "reason": "not UTF-8 text"}]))
+            with self.assertRaisesRegex(ValueError, "No selected file could be read.*missing.py: missing at the recorded commit"):
                 glance.read_files(["missing.py"], first, checkout=folder)
             with self.assertRaisesRegex(ValueError, "not found in checkout"):
                 glance.resolve_commit("f" * 40, folder)
         with self.assertRaisesRegex(ValueError, "full 40-character SHA"):
             glance.resolve_commit("main")
         with self.assertRaisesRegex(ValueError, "file names alone"):
-            glance.read_files([], COMMIT, github_repo="o/r")
+            glance.read_files([], COMMIT, github_repo="o/r", fetch=None)
         with self.assertRaisesRegex(ValueError, "exactly one source"):
             glance.read_files(["a.py"], COMMIT)
 
@@ -353,8 +387,39 @@ class GlanceTests(unittest.TestCase):
                 return {"type": "file", "size": 9, "sha": "blob1", "content": ""}
             return {"content": base64.b64encode(b"big = 1\n").decode()}
 
-        self.assertEqual(glance.read_files(["src/a b.py"], COMMIT, github_repo="o/r", fetch=fetch), {"src/a b.py": "big = 1\n"})
+        self.assertEqual(glance.read_files(["src/a b.py"], COMMIT, github_repo="o/r", fetch=fetch), ({"src/a b.py": "big = 1\n"}, []))
         self.assertEqual(asked, [f"repos/o/r/contents/src/a%20b.py?ref={COMMIT}", "repos/o/r/git/blobs/blob1"])
+
+
+@unittest.skipUnless(os.environ.get("PRISM_GLANCE_LIVE") and os.environ.get(glance.ENV),
+                     "set PRISM_GLANCE_LIVE=1 and PRISM_GLANCE to check the real Glance binary")
+class RealGlanceBundleTests(unittest.TestCase):
+    """Opt-in: does the real Glance count the whole multi-file bundle, with only its fixed frame added?"""
+
+    def count(self, text):
+        return glance.measure(text, glance=os.environ[glance.ENV])["context_tokens"]
+
+    def test_multi_file_bundle_is_counted_whole(self):
+        files = {f"pkg/module_{index}.py": "".join(
+            f"def function_{index}_{line}(value):\n    return value * {line} + {index}  # row {line}\n" for line in range(400))
+            for index in range(3)}
+        whole = glance.assemble("Crash on empty input\n\nSteps: call parse('') and read the traceback.", files)
+        frame = glance.wrapper(glance=os.environ[glance.ENV])["tokens_for_empty_bundle"]
+        cut = whole.index("File: pkg/module_2.py")
+        total, first, second = self.count(whole), self.count(whole[:cut]), self.count(whole[cut:])
+        # Counting the parts apart and together agrees up to a token or two at the join: nothing was dropped or added.
+        self.assertLessEqual(abs(total - (first + second - frame)), 3)
+        self.assertGreater(first, second)
+        # Text at the very end is counted, so the bundle is not cut short.
+        self.assertGreater(self.count(whole + "zebra quokka wombat axolotl\n"), total)
+        self.assertLess(frame, 20)
+
+    def test_bundle_larger_than_glances_default_file_limit_is_not_truncated(self):
+        block = "".join(f"value_{line} = compute(line={line}, scale={line % 7})\n" for line in range(30_000))
+        self.assertGreater(len(block.encode()), 1 << 20)
+        frame = glance.wrapper(glance=os.environ[glance.ENV])["tokens_for_empty_bundle"]
+        once, twice = self.count(block), self.count(block + block)
+        self.assertLessEqual(abs(twice - (2 * once - frame)), 3)
 
 
 class ValidationTests(unittest.TestCase):
@@ -509,6 +574,27 @@ class LeakTests(unittest.TestCase):
             with self.assertRaisesRegex(swebench.LeakError, message):
                 self.check(**options)
 
+    def test_leaks_inside_a_real_estimate_dict_are_caught_despite_json_escaping(self):
+        quoted = '        raise ValueError("value must not be blank or None here")'
+        instance = INSTANCE | {"patch": INSTANCE["patch"] + f"@@ -9,1 +9,2 @@\n+{quoted}\n"}
+        block = "\n".join(line[1:] for line in INSTANCE["patch"].splitlines() if line.startswith("+ "))
+
+        def check(**assessment):
+            estimate = build()
+            estimate["assumptions"]["model_assessment"] = {"rationale": "fine", **assessment}
+            return swebench.leak_check(instance, commit=COMMIT, files=BASE_FILES,
+                                       texts={"issue_text": INSTANCE["problem_statement"], "estimate": estimate})
+
+        self.assertEqual(check()["status"], "passed")
+        # In serialized JSON the quote and the newlines are escaped, so only the real string values can match.
+        self.assertNotIn(quoted.strip(), json.dumps({"rationale": quoted}))
+        for message, assessment in (("estimate contains a gold or test patch line", {"rationale": f"add {quoted.strip()}"}),
+                                    ("estimate contains a gold or test patch", {"likely_changes": [{"change": block}]}),
+                                    ("estimate contains the withheld hints_text", {"rationale": INSTANCE["hints_text"]}),
+                                    ("estimate carries a hidden SWE-bench field", {"test_patch": "x"})):
+            with self.assertRaisesRegex(swebench.LeakError, message):
+                check(**assessment)
+
     def test_cli_withholds_hidden_fields_and_refuses_a_leaking_selection(self):
         seen = []
 
@@ -528,10 +614,11 @@ class LeakTests(unittest.TestCase):
             with mock.patch.object(cli, "_load_env"), mock.patch.object(glance, "locate", return_value="/bin/glance"), \
                  mock.patch.object(glance, "measure", measure), contextlib.redirect_stdout(stdout), \
                  contextlib.redirect_stderr(io.StringIO()), \
-                 mock.patch.object(glance, "read_files", return_value=dict(BASE_FILES)) as read:
+                 mock.patch.object(glance, "wrapper", return_value={"tokens_for_empty_bundle": 10}), \
+                 mock.patch.object(glance, "read_files", return_value=(dict(BASE_FILES), [])) as read:
                 cli.main([*arguments, "--files", "src/a.py", "--save", str(saved)])
                 with self.assertRaisesRegex(SystemExit, "LeakError.*exist only in the gold or test patch"):
-                    read.return_value = BASE_FILES | {"tests/test_empty.py": "x"}
+                    read.return_value = (BASE_FILES | {"tests/test_empty.py": "x"}, [])
                     cli.main([*arguments, "--files", "src/a.py", "tests/test_empty.py"])
             estimate = json.loads(stdout.getvalue())
             self.assertEqual(set(estimate), CONTRACT)
@@ -566,7 +653,9 @@ class CliTests(unittest.TestCase):
                     "--commit", COMMIT, "--github-repo", "o/r", "--worker-model", "worker-x", "--pricing", folder / "pricing.json"]
             with mock.patch.object(glance, "locate", return_value="/bin/glance"), \
                  mock.patch.object(glance, "measure", lambda text, **_: fake_measure(text)), \
-                 mock.patch.object(glance, "read_files", return_value={"src/a.py": "a = 1\n", "tests/test_a.py": "t = 1\n"}) as read:
+                 mock.patch.object(glance, "wrapper", return_value={"tokens_for_empty_bundle": 10}), \
+                 mock.patch.object(glance, "read_files", return_value=(
+                     {"src/a.py": "a = 1\n"}, [{"path": "tests/test_a.py", "reason": "missing at the recorded commit"}])) as read:
                 stdout, stderr, code = self.run_cli(*base, "--save", folder / "pre.json", "--task-id", "task-9")
             self.assertIsNone(code)
             estimate = json.loads(stdout)
@@ -575,7 +664,13 @@ class CliTests(unittest.TestCase):
             self.assertEqual(read.call_args.args[0], ["src/a.py", "tests/test_a.py"])
             self.assertEqual(estimate["discovery_actual_cost"]["usd"], 0.004)
             self.assertIn("saved pre-run estimate", stderr)
-            self.assertIn("measuring 2 file(s)", stderr)
+            self.assertIn("measuring 1 file(s)", stderr)
+            self.assertIn("excluded from the measured context: tests/test_a.py (missing at the recorded commit)", stderr)
+            measurement = estimate["assumptions"]["measurement"]
+            self.assertEqual((measurement["included_paths"], measurement["excluded_paths"], measurement["encoding"]),
+                             (["src/a.py"], [{"path": "tests/test_a.py", "reason": "missing at the recorded commit"}], "fake"))
+            self.assertIn("measured selected-context tokens", measurement["label"])
+            self.assertEqual(measurement["glance_wrapper"], {"tokens_for_empty_bundle": 10})
 
             started = "2099-01-01T00:00:00Z"
             usage = ["--worker-model", "worker-x", "--uncached-input", 5000, "--output", 300, "--started-at", started]
@@ -587,6 +682,19 @@ class CliTests(unittest.TestCase):
                                            "--verified-outcome", "resolved", *usage, "--out", folder / "capped.json")
             self.assertEqual(stdout, "")
             self.assertIn("never overwritten", str(code))
+            # The record is written, parent folder included, before the Glance append; a failed write appends nothing.
+            order = []
+            nested = folder / "runs" / "new" / "solved.json"
+            record = ["solve-record", "--estimate", folder / "pre.json", "--run-status", "completed", "--verified-outcome",
+                      "resolved", *usage, "--glance-records", folder / "glance.jsonl", "--glance", "/bin/glance"]
+            with mock.patch.object(glance, "locate", return_value="/bin/glance"), \
+                 mock.patch.object(validation, "mirror_to_glance", side_effect=lambda *_: order.append(nested.exists())):
+                _, _, code = self.run_cli(*record, "--out", nested)
+                self.assertEqual((code, order, json.loads(nested.read_text())["outcome_class"]), (None, [True], "solved"))
+                with mock.patch.object(validation.results, "write_json", side_effect=OSError("disk full")):
+                    stdout, _, code = self.run_cli(*record, "--out", folder / "runs" / "other.json")
+                self.assertEqual((stdout, order), ("", [True]))
+                self.assertIn("disk full", str(code))
             stdout, _, code = self.run_cli("solve-compare", folder / "capped.json")
             self.assertEqual((code, json.loads(stdout)["solved_runs"], json.loads(stdout)["accuracy_claim"]), (None, 0, None))
 
