@@ -107,12 +107,15 @@ jobs:
           reserved = number(data.get("reserved_before_usd"))
           cap = number(data.get("usd_cap")) or Decimal(0)
           available = number(data.get("available_usd"))
-          left = available - cap if available is not None else None
+          left = (number(data.get("available_balance_usd")) if data.get("already_recorded")
+                  else available - cap if available is not None else None)
           maximum = number(data.get("request_limit_usd"))
           status = data["decision"]
           print(f"### Prism budget allocation: {status}\n")
           print(f"Requested by @{os.environ['REQUESTER']}\n")
           print("Automated estimation and allocation; decided by the budget rule saved in CFO.ai.\n")
+          if data.get("already_recorded"):
+              print("This request was already recorded; no new reservation was added.\n")
           print("| | USD |\n|---|---:|")
           for label, value in (("Repository budget", budget), ("Spent so far", spent),
                                ("Reserved before this request", reserved), ("This request (cap)", cap),

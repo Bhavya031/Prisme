@@ -205,6 +205,11 @@ def allocate(estimate_path, run_id, issue_number):
                "available_usd": row.get("K2 test available USD"),
                "request_limit_usd": row.get("K2 test request limit USD"),
                "chosen_model": model, "recommendations": recommendations, "other_models": other_models}
+    request_data, rows = read_table(access_token, CFO["request_table"], 5)
+    if [column["display_name"] for column in request_data["columns"]] != [PREFIX + name for name in REQUEST_COLUMNS]:
+        raise RuntimeError("CFO request table shape changed")
+    if any(member == request_id for member, _ in rows):
+        return summary | allocate_existing(access_token, None, request_id) | {"already_recorded": True}
     if decision == "blocked":
         return {"request_id": request_id, "decision": decision, "usd_cap": None, "reason": reason} | summary
     amount = usd(row.get("K2 test allocated USD"), "allocated USD")
@@ -217,23 +222,19 @@ def allocate(estimate_path, run_id, issue_number):
     request["model"] = model
     request["estimated_usd"] = float(amount)
     request["reason"] = reason
-    request_data, rows = read_table(access_token, CFO["request_table"], 5)
-    if [column["display_name"] for column in request_data["columns"]] != [PREFIX + name for name in REQUEST_COLUMNS]:
-        raise RuntimeError("CFO request table shape changed")
-    if not any(member == request_id for member, _ in rows):
-        columns = [PREFIX + name for name in REQUEST_COLUMNS]
-        values = [repository, request["issue_url"], commit, model,
-                  *(central[key] for key in ("input", "uncached_input", "cached_input", "output", "total")),
-                  float(amount), "approved", f"allocation/{request_id}", float(amount), float(amount),
-                  float(available - amount), reason]
-        mcp(access_token, "tools/call", {"name": "edit_table_blocks", "arguments": {
-            "org_id": CFO["org_id"], "scenario": CFO["scenario"], "update": {
-                "target": CFO["request_table"], "based_on": request_data["as_of"],
-                "dimensions": [{"target": PREFIX + "request ID", "add_items": [request_id]}],
-                "values": {"columns": columns, "rows": [[request_id, *values]]},
-            },
-        }}, 6)
-    return allocate_existing(access_token, request, request_id) | summary
+    columns = [PREFIX + name for name in REQUEST_COLUMNS]
+    values = [repository, request["issue_url"], commit, model,
+              *(central[key] for key in ("input", "uncached_input", "cached_input", "output", "total")),
+              float(amount), "allocated", f"allocation/{request_id}", float(amount), float(amount),
+              float(available - amount), reason]
+    mcp(access_token, "tools/call", {"name": "edit_table_blocks", "arguments": {
+        "org_id": CFO["org_id"], "scenario": CFO["scenario"], "update": {
+            "target": CFO["request_table"], "based_on": request_data["as_of"],
+            "dimensions": [{"target": PREFIX + "request ID", "add_items": [request_id]}],
+            "values": {"columns": columns, "rows": [[request_id, *values]]},
+        },
+    }}, 6)
+    return summary | allocate_existing(access_token, request, request_id)
 
 
 def allocate_existing(access_token, request, request_id):
@@ -243,27 +244,30 @@ def allocate_existing(access_token, request, request_id):
     if len(matches) != 1:
         raise RuntimeError("CFO allocation read-back did not find exactly one request row")
     row = matches[0]
-    for key, column in (("repository", "request repository"), ("issue_url", "issue URL"),
-                        ("pinned_commit", "pinned commit"), ("model", "worker model"),
-                        ("estimated_usd", "estimated USD")):
-        actual, expected = row[PREFIX + column], request[key]
-        if key == "estimated_usd":
-            actual, expected = usd(actual, "read-back estimate"), usd(expected, "allocated USD")
-        if actual != expected:
-            raise RuntimeError("CFO allocation read-back has different request inputs")
-    if row[PREFIX + "decision"] != "approved" or row[PREFIX + "allocation ID"] != f"allocation/{request_id}":
-        raise RuntimeError("CFO allocation read-back is not approved")
-    if (usd(row[PREFIX + "allocated USD cap"], "read-back cap") != usd(request["estimated_usd"], "allocated USD")
-            or usd(row[PREFIX + "reservation USD"], "read-back reservation") != usd(request["estimated_usd"], "allocated USD")):
-        raise RuntimeError("CFO allocation read-back has the wrong USD cap or reservation")
-    if row[PREFIX + "reason"] != request["reason"]:
-        raise RuntimeError("CFO allocation read-back has a different reason")
+    if request is not None:
+        for key, column in (("repository", "request repository"), ("issue_url", "issue URL"),
+                            ("pinned_commit", "pinned commit"), ("model", "worker model"),
+                            ("estimated_usd", "estimated USD")):
+            actual, expected = row[PREFIX + column], request[key]
+            if key == "estimated_usd":
+                actual, expected = usd(actual, "read-back estimate"), usd(expected, "allocated USD")
+            if actual != expected:
+                raise RuntimeError("CFO allocation read-back has different request inputs")
+        if row[PREFIX + "decision"] != "allocated" or row[PREFIX + "allocation ID"] != f"allocation/{request_id}":
+            raise RuntimeError("CFO allocation read-back is not allocated")
+        if (usd(row[PREFIX + "allocated USD cap"], "read-back cap") != usd(request["estimated_usd"], "allocated USD")
+                or usd(row[PREFIX + "reservation USD"], "read-back reservation") != usd(request["estimated_usd"], "allocated USD")):
+            raise RuntimeError("CFO allocation read-back has the wrong USD cap or reservation")
+        if row[PREFIX + "reason"] != request["reason"]:
+            raise RuntimeError("CFO allocation read-back has a different reason")
+    issue_url = row[PREFIX + "issue URL"]
     return {"request_id": request_id, "allocation_id": row[PREFIX + "allocation ID"],
-            "repository": request["repository"], "issue": int(request["issue_url"].rsplit("/", 1)[-1]),
-            "issue_url": request["issue_url"],
-            "pinned_commit": request["pinned_commit"],
-            "usd_cap": row[PREFIX + "allocated USD cap"],
+            "repository": row[PREFIX + "request repository"], "issue": int(issue_url.rsplit("/", 1)[-1]),
+            "issue_url": issue_url, "pinned_commit": row[PREFIX + "pinned commit"],
+            "chosen_model": row[PREFIX + "worker model"], "usd_cap": row[PREFIX + "allocated USD cap"],
+            "reservation_usd": row[PREFIX + "reservation USD"],
             "decision": row[PREFIX + "decision"], "reason": row[PREFIX + "reason"],
+            "available_balance_usd": row[PREFIX + "available balance USD"],
             "request_row_count": len(matches), "table_row_count": len(rows),
             "request_reservation_usd": sum(item[PREFIX + "reservation USD"] or 0 for item in matches),
             "table_reservation_usd": sum(item[PREFIX + "reservation USD"] or 0 for _, item in rows)}
@@ -285,7 +289,7 @@ def main():
         result = allocate(args.estimate_json, args.run_id, args.issue_number)
         Path(args.output).write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps(result))
-        if result["decision"] != "approved":
+        if result["decision"] != "allocated":
             parser.exit(1, "CFO allocation stopped: " + result["reason"] + "\n")
     except (OSError, KeyError, ValueError, RuntimeError) as error:
         parser.exit(1, f"{error}\n")

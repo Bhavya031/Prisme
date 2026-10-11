@@ -114,7 +114,7 @@ def writeback_plan(reconciliation: dict, budget_snapshot: tuple, request_snapsho
     if (not cap.is_finite() or not actual.is_finite() or actual < 0 or actual > cap
             or Decimal(reconciliation["unused_reservation_usd"]) != cap - actual
             or row[prefix + "allocation ID"] != reconciliation["allocation_id"]
-            or row[prefix + "decision"] != "approved"
+            or row[prefix + "decision"] != "allocated"
             or Decimal(str(row[prefix + "allocated USD cap"])) != cap
             or Decimal(str(row[prefix + "reservation USD"])) != cap
             or budget[prefix + "repository"] != row[prefix + "request repository"]):

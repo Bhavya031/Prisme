@@ -18,7 +18,7 @@ class BudgetedWorker:
         expected = {"request_id": request_id, "repository": repository, "issue_url": issue_url,
                     "pinned_commit": pinned_commit, "issue": int(issue.path.rsplit("/", 1)[-1])
                     if issue.path.rsplit("/", 1)[-1].isdigit() else None}
-        if (allocation.get("decision") != "approved" or not allocation.get("allocation_id")
+        if (allocation.get("decision") != "allocated" or not allocation.get("allocation_id")
                 or any(not value or allocation.get(key) != value for key, value in expected.items())
                 or issue.scheme != "https" or issue.netloc != "github.com"
                 or issue.path != f"/{repository}/issues/{expected['issue']}"
