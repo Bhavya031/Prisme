@@ -23,7 +23,7 @@ class BudgetedWorker:
                 or issue.scheme != "https" or issue.netloc != "github.com"
                 or issue.path != f"/{repository}/issues/{expected['issue']}"
                 or estimate.get("repository_commit") != pinned_commit
-                or estimate.get("worker_model") != worker_model):
+                or allocation.get("chosen_model") != worker_model):
             raise ValueError("Worker run needs an allocated decision matching its request and estimate")
         matches = [name for name, price in models.PRICES.items() if price["model"] == worker_model]
         if len(matches) != 1:
@@ -32,17 +32,12 @@ class BudgetedWorker:
         if models._model(self.provider) != worker_model:
             raise ValueError("Configured provider model differs from the allocated worker model")
         self.prices = models.PRICES[self.provider]
-        rates = estimate.get("assumptions", {}).get("pricing", {}).get("usd_per_million_tokens", {})
-        if any(rates.get(key) is None or Decimal(str(rates[key])) != Decimal(str(self.prices[price])) for key, price in
-               (("uncached_input", "input"), ("cached_input", "cached_input"), ("output", "output"))):
-            raise ValueError("Saved estimate prices differ from the worker usage prices")
         try:
             self.cap = Decimal(str(allocation["usd_cap"]))
-            estimate_cap = Decimal(str(estimate["end_to_end_cost_estimate"]["central"]["usd"]))
         except (KeyError, TypeError, ValueError, InvalidOperation):
-            raise ValueError("Allocation or estimate has no valid USD cap") from None
-        if not self.cap.is_finite() or self.cap <= 0 or self.cap != estimate_cap:
-            raise ValueError("Allocation USD cap must match the positive central estimate")
+            raise ValueError("Allocation has no valid USD cap") from None
+        if not self.cap.is_finite() or self.cap <= 0:
+            raise ValueError("Allocation USD cap must be positive")
         self.allocation_id = allocation["allocation_id"]
         self.spent = Decimal(0)
         self.calls = 0

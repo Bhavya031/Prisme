@@ -299,19 +299,32 @@ jobs:
           spent = number(data.get("spent_usd"))
           reserved = number(data.get("reserved_before_usd"))
           cap = number(data.get("usd_cap")) or Decimal(0)
-          fraction = number(data.get("max_budget_fraction"))
-          left = budget - spent - reserved - cap if None not in (budget, spent, reserved) else None
-          maximum = budget * fraction if budget is not None and fraction is not None else None
-          status = "allocated" if data["decision"] == "allocated" else "blocked"
+          available = number(data.get("available_usd"))
+          left = (number(data.get("available_balance_usd")) if data.get("already_recorded")
+                  else available - cap if available is not None else None)
+          maximum = number(data.get("request_limit_usd"))
+          status = data["decision"]
           print(f"### Prism budget allocation: {status}\n")
           print(f"Requested by @{os.environ['REQUESTER']}\n")
+          print("Automated estimation and allocation; decided by the budget rule saved in CFO.ai.\n")
+          if data.get("already_recorded"):
+              print("This request was already recorded; no new reservation was added.\n")
           print("| | USD |\n|---|---:|")
           for label, value in (("Repository budget", budget), ("Spent so far", spent),
                                ("Reserved before this request", reserved), ("This request (cap)", cap),
                                ("Left after this request", left), ("Max per request", maximum)):
               print(f"| {label} | {money(value)} |")
-          if status == "blocked":
-              print(f"\nReason: {data['reason']}")
+          print(f"\nChosen model: `{data.get('chosen_model') or '—'}`")
+          print(f"\nReason: {data['reason']}")
+          print("\nSuggested models\n")
+          print("| Model | Estimated cost |\n|---|---:|")
+          for item in data.get("recommendations", []):
+              print(f"| {item['model']} | {money(number(item['usd']))} |")
+          print("\n<details><summary>Other models</summary>\n")
+          print("| Model | Estimated cost |\n|---|---:|")
+          for item in data.get("other_models", []):
+              print(f"| {item['model']} | {money(number(item['usd']))} |")
+          print("\n</details>")
           print(f"\nRequest: `{data['request_id']}`")
           PY
             gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/cfo-allocation.md" || echo 'Could not post budget allocation comment' >&2
