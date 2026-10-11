@@ -10,8 +10,8 @@ for file in .github/prism.json .github/workflows/prism-estimate.yml .github/work
   [[ ! -e "$target/$file" ]] || { echo "$target/$file already exists; move it before setup." >&2; exit 1; }
 done
 
-keys=(org_id scenario page budget_table request_table column_prefix cooldown_minutes provider worker_model max_cost_usd max_output_tokens max_extra_rounds timeout_seconds)
-defaults=('' 'Main Scenario' '' '' '' '' 10 claude claude-sonnet-5-5 0.05 4000 1 180)
+keys=(org_id scenario page budget_table request_table decision_table column_prefix cooldown_minutes provider worker_model max_cost_usd max_output_tokens max_extra_rounds timeout_seconds)
+defaults=('' 'Main Scenario' '' '' '' '' '' 10 claude claude-sonnet-5-5 0.05 4000 1 180)
 values=()
 for i in "${!keys[@]}"; do
   key=${keys[i]}
@@ -61,21 +61,21 @@ json_string() {
 mkdir -p "$target/.github/workflows"
 {
   printf '{\n  "cfo": {\n'
-  for i in {0..5}; do
+  for i in {0..6}; do
     printf '    "%s": ' "${keys[i]}"
     json_string "${values[i]}"
-    if (( i < 5 )); then printf ','; fi
+    if (( i < 6 )); then printf ','; fi
     printf '\n'
   done
   printf '  },\n  "estimate": {\n'
-  for i in {6..12}; do
+  for i in {7..13}; do
     printf '    "%s": ' "${keys[i]}"
     if [[ ${keys[i]} == provider || ${keys[i]} == worker_model ]]; then
       json_string "${values[i]}"
     else
       printf '%s' "${values[i]}"
     fi
-    if (( i < 12 )); then printf ','; fi
+    if (( i < 13 )); then printf ','; fi
     printf '\n'
   done
   printf '  }\n}\n'

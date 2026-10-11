@@ -1,10 +1,10 @@
 # Prism
 
-A prism splits one beam into its parts. **Prism** takes one GitHub issue and shows three sides before a coding worker starts: **scope** (the existing files likely to change), **usage** (predicted tokens), and **cost** (a USD estimate followed by a budget allocation). It provides automated estimation and allocation; it does not implement the issue.
+A prism splits one beam into its parts. **Prism** takes one GitHub issue and shows three sides before a coding worker starts: **scope** (the existing files likely to change), **usage** (predicted tokens), and **cost** (a USD estimate followed by a budget-rule allocation). It provides automated estimation and allocation; it does not implement the issue.
 
 ## What it is
 
-Prism is a Python CLI with example GitHub Actions workflows. An eligible issue or `/prism estimate` comment starts a file prediction, a heuristic estimate of a future coding run, and then an allocation check against repository budget tables. Scope and usage are predictions, not a plan or a bill. The estimate labels its assumptions as unvalidated.
+Prism is a Python CLI with example GitHub Actions workflows. An eligible issue or `/prism estimate` comment starts a file prediction, a heuristic estimate of a future coding run, and then an allocation check using the budget rule saved in CFO.ai. Scope and usage are predictions, not a plan or a bill. The estimate labels its assumptions as unvalidated.
 
 ## How it works
 
@@ -17,17 +17,19 @@ flowchart TD
     E --> F[Count selected context and project run tokens: USAGE]
     F --> G[Price token estimates in USD: COST]
     G --> H[Post estimate comment on issue]
-    H --> I[Read budget and request rows from CFO.ai]
-    I --> J[Prism code applies budget policy]
-    J -->|allocated| K[Write reservation row through CFO.ai model tools]
-    K --> L[Post allocation table and requester mention on issue]
-    J -->|blocked or denied| L
+    H --> I[Write or reuse predicted-token inputs in CFO.ai decision test]
+    I --> J[Read result decided by saved CFO.ai budget rule]
+    J --> K[Prism sanity-checks decision, model, amount, reason]
+    K --> L[Check request ID against existing reservations]
+    L -->|new approved request| M[Write reservation row through CFO.ai model tools]
+    M --> N[Post allocation table, models, and requester mention]
+    L -->|blocked or already recorded| N
 ```
 
 1. The example workflow reacts to new issues and exact `/prism estimate` comments from repository owners, members, or collaborators. A separate job adds 👀. The estimate job pins the default branch commit (or a maintainer-set replay ref), then checks duplicate requests and a repository-wide cooldown before model calls.
 2. **Scope:** a model searches the ready Entire mirror for a live issue and predicts existing file paths. A replay searches Git at the pinned commit. Prism reads selected file contents from that commit.
 3. **Usage:** Glance counts the issue text and selected file contents as a starting context. Prism applies explicit, unvalidated assumptions to project low, central, and high token usage for a future worker run.
-4. **Cost:** Prism prices those projections with model list prices and adds the file-discovery call's known cost. It posts the estimate first. On success, Prism reads the CFO.ai tables, applies the repository's budget rule in its own code, writes a reservation row when allocated, and posts a separate result.
+4. **Cost:** Prism prices those projections with model list prices and adds the file-discovery call's known cost. It posts the estimate first. On success, it writes predicted-token inputs to CFO.ai's decision test table, reads the result decided by the budget rule saved there, and sanity-checks the allow/block decision, chosen model, allocated amount, and reason. It writes a reservation for a new approved request and posts a separate result. If that request ID already has a reservation row, it uses the existing record without a second reservation.
 
 ## Integrations
 
@@ -37,7 +39,7 @@ flowchart TD
 | [Anthropic](https://www.anthropic.com/) | The example's Claude provider predicts likely files from issue and repository context. Prism also supports an OpenAI provider, but the example config selects Claude. |
 | [Glance](https://github.com/Bhavya031/Glance) | Counts the exact starting context bytes that Prism assembles; it does not pick files or estimate the whole worker run. |
 | [Neatlogs](https://neatlogs.com/) | Optional tracing for Prism's model workflow when `NEATLOGS_API_KEY` is set. It does not determine scope, usage, cost, or allocation. |
-| [CFO.ai](https://cfo.ai/) | Supplies the configured budget and request tables through model tools, and stores Prism's reservation row. Prism code applies the budget policy. |
+| [CFO.ai](https://cfo.ai/) | Holds the saved budget rule and its decision test, budget, and request tables. Prism reads the rule's result, checks it, and records approved reservations through CFO.ai model tools. |
 
 ## Install
 
@@ -50,18 +52,18 @@ The workflows read `.github/prism.json` from the target repository's default bra
 | Group | Keys |
 |---|---|
 | `estimate` | `cooldown_minutes`, `provider`, `worker_model`, `max_cost_usd`, `max_output_tokens`, `max_extra_rounds`, `timeout_seconds` control the estimate and its file-discovery limits. |
-| `cfo` | `org_id`, `scenario`, `page`, `budget_table`, `request_table`, `column_prefix` name the CFO.ai tables and columns to read and write. |
+| `cfo` | `org_id`, `scenario`, `page`, `budget_table`, `request_table`, `decision_table`, `column_prefix` name the CFO.ai tables and columns used for the rule result and reservation. |
 
 See [SETUP.md](docs/SETUP.md) for each field, secret, and required column. The optional Actions variable `PRISM_REPLAY_REF` pins a historical branch, tag, or commit; without it, the workflow uses the repository default branch.
 
 ## What appears on the issue
 
 - **Estimate comment:** one marked comment is first reserved as “Estimating,” then updated with predicted files (**scope**), measured starting context and low/central/high projected tokens (**usage**), solve and end-to-end USD estimates (**cost**), discovery spend, worker model, and pinned commit. A failure updates it with the stopping reason when possible.
-- **Allocation comment:** on a successful estimate, a separate comment mentions the requester and shows the repository budget, spent and reserved amounts, this request's cap, remaining balance, and maximum per request. It says allocated or blocked and includes the request ID. A denied policy check is reported as blocked; no reservation is written.
+- **Allocation comment:** on a successful estimate, a separate comment mentions the requester and shows the budget, spending, reservations, allocated amount, remaining balance, and request limit. It shows the chosen model and reason decided by the budget rule saved in CFO.ai, three suggested models, and other models in a fold-out. A blocked result has no new reservation. When the request ID already has a reservation row, the comment says it was already recorded and no second reservation was added.
 
 ## CFO.ai data boundary
 
-Prism sends CFO.ai the repository name, issue URL, pinned commit, worker model, projected central token counts, and finished central USD estimate, alongside the budget and policy fields already in the configured tables. It reads the matching budget row and existing request rows; Prism code applies the balance and per-request fraction rule and writes an allocation row when allowed. **Prism prices the tokens before this step.** CFO.ai receives no price list, repository code, or issue text from this allocation call.
+Prism writes the repository name, issue URL, and projected **uncached input, cached input, and output tokens** to the configured `K2 decision test` table. The budget rule saved in CFO.ai (`K2 decision rules`) supplies the allow/block decision, chosen model, allocated USD amount, reason, and model suggestions. Prism reads the computed decision row, checks the inputs and approved amount against available funds and the request limit, then writes the pinned commit, chosen model, token counts, amount, and reason to the reservation table for a new approved request. It reads the reservation back to confirm it. **Prism prices its own estimate before this step; it sends no price list, repository code, or issue text in these CFO.ai calls.** The issue URL is included.
 
 ## Limits and not built yet
 
