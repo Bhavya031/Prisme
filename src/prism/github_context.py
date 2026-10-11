@@ -303,7 +303,7 @@ def _collect(fetch, root: str, issue_number: int, owner: str, repo: str, benchma
         if pre_merge_sha is not None and before != pre_merge_sha:
             raise ValueError("Target PR parent does not match pre_merge_sha")
         fork_owner, fork_repo = _github_repo(entire_repo)
-        if _head_sha(fetch, f"repos/{fork_owner}/{fork_repo}") != before:
+        if pre_merge_sha is None and _head_sha(fetch, f"repos/{fork_owner}/{fork_repo}") != before:
             raise ValueError("Entire repository default branch does not match the pre-merge commit")
         known, repo_map = _tree(fetch, root, before)
     else:

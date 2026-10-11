@@ -1,0 +1,198 @@
+{
+  "schema": "prism.solve-estimate/2",
+  "task_id": "sympy__sympy-20590",
+  "saved_at": "2026-10-11T03:36:37Z",
+  "estimate": {
+    "repository_commit": "cffd4e0f86fefd4802349a9f9b19ed70934ea354",
+    "worker_model": "claude-sonnet-5-5",
+    "measured_context_tokens": 66041,
+    "discovery_actual_cost": {
+      "usd": null,
+      "scope": "file_discovery",
+      "runs": {},
+      "cost_basis": "not supplied: the files were given directly, so no discovery run is counted"
+    },
+    "estimator_actual_cost": {
+      "usd": 0.0,
+      "model_calls": 0,
+      "cost_basis": "heuristic mode makes no model call"
+    },
+    "solve_token_estimate": {
+      "low": {
+        "input": 348205,
+        "uncached_input": 348205,
+        "cached_input": 0,
+        "output": 1500,
+        "total": 349705,
+        "worker_turns_including_retries": 5
+      },
+      "central": {
+        "input": 1727879,
+        "uncached_input": 1727879,
+        "cached_input": 0,
+        "output": 11400,
+        "total": 1739279,
+        "worker_turns_including_retries": 19
+      },
+      "high": {
+        "input": 12116460,
+        "uncached_input": 12116460,
+        "cached_input": 0,
+        "output": 72000,
+        "total": 12188460,
+        "worker_turns_including_retries": 60
+      }
+    },
+    "solve_cost_estimate": {
+      "low": {
+        "usd": 0.71141,
+        "uncached_input_usd": 0.69641,
+        "cached_input_usd": 0.0,
+        "output_usd": 0.015
+      },
+      "central": {
+        "usd": 3.569758,
+        "uncached_input_usd": 3.455758,
+        "cached_input_usd": 0.0,
+        "output_usd": 0.114
+      },
+      "high": {
+        "usd": 24.95292,
+        "uncached_input_usd": 24.23292,
+        "cached_input_usd": 0.0,
+        "output_usd": 0.72
+      }
+    },
+    "end_to_end_cost_estimate": {
+      "low": {
+        "usd": 0.71141,
+        "discovery_actual_usd": null,
+        "estimator_actual_usd": 0.0,
+        "solve_estimate_usd": 0.71141
+      },
+      "central": {
+        "usd": 3.569758,
+        "discovery_actual_usd": null,
+        "estimator_actual_usd": 0.0,
+        "solve_estimate_usd": 3.569758
+      },
+      "high": {
+        "usd": 24.95292,
+        "discovery_actual_usd": null,
+        "estimator_actual_usd": 0.0,
+        "solve_estimate_usd": 24.95292
+      }
+    },
+    "assumptions": {
+      "status": "Unvalidated planning assumptions. No value or multiplier here has been compared with a real coding-worker run; confidence stays low until recorded runs calibrate them.",
+      "token_model": "turns = ceil(worker_turns * (1 + retry_fraction)). input = worker_overhead_tokens * turns + measured_context + measured_context * context_resend_fraction * (turns - 1) + (tool_response_tokens_per_turn + output_tokens_per_turn) * turns * (turns - 1) / 2. output = output_tokens_per_turn * turns + edit_output_tokens.",
+      "definitions": {
+        "worker_turns": "model calls the worker makes before retries",
+        "retry_fraction": "extra share of turns spent redoing work after a failed attempt or test run",
+        "worker_overhead_tokens": "system prompt and tool definitions sent on every turn; depends on the worker, not measured",
+        "context_resend_fraction": "share of the measured starting context sent again on each later turn (1 = full history resent)",
+        "tool_response_tokens_per_turn": "tool output added to the conversation per turn and resent on every later turn",
+        "output_tokens_per_turn": "model output per turn including reasoning, resent as input on every later turn",
+        "edit_output_tokens": "extra output for writing the change itself; 0 in heuristic mode"
+      },
+      "levels": {
+        "low": {
+          "worker_turns": 5,
+          "retry_fraction": 0.0,
+          "worker_overhead_tokens": 2000,
+          "context_resend_fraction": 1.0,
+          "tool_response_tokens_per_turn": 500,
+          "output_tokens_per_turn": 300,
+          "edit_output_tokens": 0
+        },
+        "central": {
+          "worker_turns": 15,
+          "retry_fraction": 0.25,
+          "worker_overhead_tokens": 6000,
+          "context_resend_fraction": 1.0,
+          "tool_response_tokens_per_turn": 1500,
+          "output_tokens_per_turn": 600,
+          "edit_output_tokens": 0
+        },
+        "high": {
+          "worker_turns": 40,
+          "retry_fraction": 0.5,
+          "worker_overhead_tokens": 12000,
+          "context_resend_fraction": 1.0,
+          "tool_response_tokens_per_turn": 3000,
+          "output_tokens_per_turn": 1200,
+          "edit_output_tokens": 0
+        }
+      },
+      "cache": {
+        "cache_read_fraction": null,
+        "note": "No cache-hit rate is assumed: every input token is priced as uncached. A worker that uses prompt caching would pay less for input."
+      },
+      "reasoning": "Output tokens include reasoning where the provider bills it as output; it is not counted again.",
+      "pricing": {
+        "model": "claude-sonnet-5-5",
+        "currency": "USD",
+        "usd_per_million_tokens": {
+          "uncached_input": 2.0,
+          "cached_input": 0.1,
+          "output": 10.0
+        },
+        "source": "prism built-in list prices (models.PRICES)",
+        "billing": "Pay-per-token API list prices. A subscription plan's allowance is not API billing and is not modelled here."
+      },
+      "measurement": {
+        "label": "measured selected-context tokens: a count of the selected starting context, not a prediction of total solve tokens",
+        "tool": "glance count --json --encoding <encoding> - (bundle on stdin)",
+        "context_tokens": 66041,
+        "encoding": "o200k_base",
+        "glance_schema_version": "1",
+        "glance_version": "dev",
+        "input_bytes": 260852,
+        "input_sha256": "91d5ee5535a7ebcd6e8d9ad1afb504cf0d824fd160cfd9bbcc743e09b8e6b46c",
+        "includes": "issue text and each included file's path, separators and full contents at repository_commit: exactly the bytes hashed in input_sha256, with nothing added by Glance",
+        "note": "Counted with the named encoding; the worker model's own tokenizer can count differently.",
+        "issue_source": "SWE-bench sympy__sympy-20590 problem_statement",
+        "file_selection": "--files",
+        "included_paths": [
+          "sympy/core/symbol.py",
+          "sympy/core/expr.py",
+          "sympy/logic/boolalg.py"
+        ],
+        "excluded_paths": [],
+        "content_source": "GitHub API, sympy/sympy"
+      },
+      "end_to_end": "discovery actual cost + estimator actual cost + solve cost estimate; discovery cost was not supplied and is not included",
+      "leak_check": {
+        "status": "passed",
+        "instance_id": "sympy__sympy-20590",
+        "commit": "cffd4e0f86fefd4802349a9f9b19ed70934ea354",
+        "hidden_fields_withheld": [
+          "patch",
+          "test_patch",
+          "FAIL_TO_PASS",
+          "PASS_TO_PASS",
+          "hints_text"
+        ],
+        "checked_texts": [
+          "estimate",
+          "issue_text"
+        ],
+        "checked_files": [
+          "sympy/core/expr.py",
+          "sympy/core/symbol.py",
+          "sympy/logic/boolalg.py"
+        ],
+        "markers": {
+          "patch_lines": 3,
+          "patch_blocks": 2,
+          "evaluator_test_ids": 22,
+          "paths_created_by_patches": 0
+        },
+        "scope": "Checks the estimator's inputs and saved estimate. It says nothing about estimate accuracy."
+      }
+    },
+    "confidence": "low",
+    "estimation_method": "heuristic"
+  },
+  "estimate_sha256": "76c4c7454b75b44e7e83db1ea1c5830780c828772ceeb6f1cc6620c2a2b9b18f"
+}

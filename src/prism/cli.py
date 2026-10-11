@@ -18,6 +18,8 @@ def parser() -> argparse.ArgumentParser:
     predict = commands.add_parser("predict")
     predict.add_argument("issue_url")
     predict.add_argument("--repo", required=True)
+    predict.add_argument("--pr-url", help="target PR to exclude from a pre-merge benchmark prediction")
+    predict.add_argument("--pre-merge-sha", help="pre-merge base commit; requires --pr-url")
     predict.add_argument("--provider", choices=("claude", "openai", "both"), default="both")
     predict.add_argument("--format", choices=("text", "json", "markdown"))
     predict.add_argument("--max-cost-usd", type=float, default=None,
@@ -112,6 +114,15 @@ def parser() -> argparse.ArgumentParser:
 
     compare = commands.add_parser("solve-compare", help="counts of estimates against recorded worker runs")
     compare.add_argument("records", type=Path, nargs="+")
+
+    gate = commands.add_parser("issue-gate", help="issue bot: refuse an event that may not start a run; print "
+                                                  "note=<try-again line> when the repository is rate limited")
+    gate.add_argument("--event", type=Path, required=True, help="GitHub webhook event JSON (GITHUB_EVENT_PATH)")
+    comment = commands.add_parser("issue-comment", help="issue bot: the markdown comment for a finished or failed run")
+    comment.add_argument("--prediction", type=Path, help="`prism predict --format json` output, if it got that far")
+    comment.add_argument("--estimate", type=Path, help="`prism solve-estimate` output, if it got that far")
+    comment.add_argument("--errors", type=Path, nargs="*", default=[], help="stderr of the steps, in run order")
+    comment.add_argument("--run-url", help="link to the workflow run")
     return command_parser
 
 
@@ -159,6 +170,8 @@ def _print_predictions(predictions, output_format, trace_id=None, failed=None):
 
 def _load_env(path=".env") -> None:
     """Fill unset variables from a .env in the working directory."""
+    if os.environ.get("PRISM_SKIP_DOTENV"):
+        return
     if not os.path.isfile(path):
         return
     for line in Path(path).read_text().splitlines():
@@ -298,9 +311,44 @@ def _solve(args) -> None:
     print(json.dumps(result, indent=2))
 
 
+def _saved(path: Path | None):
+    """A step's JSON output, or None when the step never wrote any."""
+    try:
+        return _read_json(path) if path else None
+    except (OSError, ValueError):
+        return None
+
+
+def _issue(args) -> None:
+    """`prism issue-gate` and `prism issue-comment`, the two pieces the issue-bot workflow calls."""
+    from . import bot, github_context
+
+    if args.command == "issue-gate":
+        try:
+            note = bot.gate(_read_json(args.event), github_context.api_v2)
+        except PermissionError as error:
+            raise SystemExit(f"prism issue-gate: not running: {error}") from None
+        print(f"note={note or ''}")
+        return
+    estimate = _saved(args.estimate)
+    if isinstance(estimate, dict):
+        # A file written by --save wraps the estimate.
+        estimate = estimate.get("estimate", estimate)
+    if not isinstance(estimate, dict) or "solve_cost_estimate" not in estimate:
+        estimate = None
+    prediction = _saved(args.prediction)
+    errors = "\n".join(path.read_text(errors="replace") for path in args.errors if path.is_file())
+    print(bot.render(prediction if isinstance(prediction, dict) else None, estimate, errors, args.run_url), end="")
+    if estimate is None:
+        raise SystemExit(1)
+
+
 def main(argv=None) -> None:
     args = parser().parse_args(argv)
     _load_env()
+    if args.command.startswith("issue-"):
+        _issue(args)
+        return
     if args.command in ("cost", "policy"):
         _report(args)
         return
@@ -313,6 +361,8 @@ def main(argv=None) -> None:
         from .github_context import build_context
 
         providers = ("claude", "openai") if args.provider == "both" else (args.provider,)
+        if args.pre_merge_sha and not args.pr_url:
+            raise SystemExit("prism predict: --pre-merge-sha requires --pr-url")
         budget = {"max_cost_usd": args.max_cost_usd, "max_extra": args.max_extra_rounds,
                   "timeout_seconds": args.timeout_seconds}
         if args.max_output_tokens is not None:
@@ -331,7 +381,8 @@ def main(argv=None) -> None:
         try:
             with tracing.workflow("issue-to-files") as span:
                 with tracing.step("collect-context", "TOOL"):
-                    ctx = build_context(args.issue_url, entire_repo=args.repo)
+                    ctx = build_context(args.issue_url, entire_repo=args.repo,
+                                        pr_url=args.pr_url, pre_merge_sha=args.pre_merge_sha)
                 outcomes = asyncio.run(_predict(ctx, providers, budget))
             predictions, failed = [], {}
             for provider, outcome in zip(providers, outcomes):

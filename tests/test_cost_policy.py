@@ -399,9 +399,12 @@ class BudgetTests(unittest.TestCase):
     def test_cli_passes_budgets_and_labels_the_cost(self):
         stdout = io.StringIO()
         with mock.patch.object(cli, "_load_env"), mock.patch.object(entire, "ensure_ready"), \
-             mock.patch.object(github_context, "build_context", return_value=self.ctx), contextlib.redirect_stdout(stdout):
+             mock.patch.object(github_context, "build_context", return_value=self.ctx) as build_context, contextlib.redirect_stdout(stdout):
             cli.main(["predict", "https://github.com/o/r/issues/1", "--repo", "gh/o/r", "--provider", "openai", "--format", "json",
-                      "--max-cost-usd", "0.005", "--max-extra-rounds", "3", "--timeout-seconds", "30", "--max-output-tokens", "800"])
+                      "--max-cost-usd", "0.005", "--max-extra-rounds", "3", "--timeout-seconds", "30", "--max-output-tokens", "800",
+                      "--pr-url", "https://github.com/o/r/pull/42", "--pre-merge-sha", "a" * 40])
+        build_context.assert_called_once_with("https://github.com/o/r/issues/1", entire_repo="gh/o/r",
+                                              pr_url="https://github.com/o/r/pull/42", pre_merge_sha="a" * 40)
         prediction = json.loads(stdout.getvalue())["openai"]
         self.assertEqual((prediction["model"], prediction["cost_type"]), ("gpt-6-sol", "estimated_list_price"))
         self.assertIn("neatlogs_trace_id", prediction)

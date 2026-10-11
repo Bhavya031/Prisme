@@ -82,6 +82,15 @@ class EntireTests(unittest.TestCase):
             self.assertEqual(os.environ["PRISM_KEPT"], "shell")
             del os.environ["PRISM_NEW"]
 
+    def test_issue_workflow_does_not_load_dotenv(self):
+        with tempfile.TemporaryDirectory() as folder, \
+             mock.patch.dict(os.environ, {"PRISM_SKIP_DOTENV": "1"}):
+            path = os.path.join(folder, ".env")
+            with open(path, "w") as file:
+                file.write("PRISM_IGNORED=file\n")
+            cli._load_env(path)
+            self.assertNotIn("PRISM_IGNORED", os.environ)
+
     def test_tracing_step_is_a_context_manager_with_the_sdk(self):
         sdk = mock.MagicMock()
         with mock.patch.object(tracing, "_sdk", return_value=sdk):
