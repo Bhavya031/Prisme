@@ -4,9 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: Saved k-2 Prism estimate run (issue 40)
+        description: Saved Prism estimate run in this repository
         required: true
-        default: "38138900610"
+      issue_number:
+        description: Issue the saved estimate belongs to
+        required: true
       preflight_only:
         description: Check GitHub secret write access without CFO OAuth
         type: boolean
@@ -34,13 +36,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.CFO_SECRET_WRITE_TOKEN }}
         run: |
-          if output=$(gh api -i repos/Bhavya031/k-2/actions/secrets/public-key 2>&1); then
+          if output=$(gh api -i "repos/$GITHUB_REPOSITORY/actions/secrets/public-key" 2>&1); then
             printf 'public-key GET: %s\n' "$(printf '%s\n' "$output" | grep -m1 '^HTTP/')"
           else
             printf '%s\n' "$output" | grep -E '^HTTP/|^gh:' || true
             exit 1
           fi
-          if output=$(GH_DEBUG=api gh secret set CFO_SECRET_WRITE_PREFLIGHT --repo Bhavya031/k-2 --body ok 2>&1); then
+          if output=$(GH_DEBUG=api gh secret set CFO_SECRET_WRITE_PREFLIGHT --repo "$GITHUB_REPOSITORY" --body ok 2>&1); then
             printf '%s\n' "$output" | grep '^< HTTP/' | sed 's/^</dummy secret set:/'
           else
             printf '%s\n' "$output" | grep -E '^< HTTP/|^gh:' || true
@@ -62,18 +64,21 @@ jobs:
         if: ${{ !inputs.preflight_only }}
         env:
           RUN_ID: ${{ inputs.run_id }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
         run: |
-          [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo 'run_id must be numeric' >&2; exit 1; }
-          gh run download "$RUN_ID" --repo Bhavya031/k-2 --name prism-estimate-40 --dir "$RUNNER_TEMP/prism-estimate"
+          [[ "$RUN_ID" =~ ^[0-9]+$ && "$ISSUE_NUMBER" =~ ^[0-9]+$ ]] || { echo 'run_id and issue_number must be numeric' >&2; exit 1; }
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "prism-estimate-$ISSUE_NUMBER" --dir "$RUNNER_TEMP/prism-estimate"
           test -s "$RUNNER_TEMP/prism-estimate/estimate.json"
+          gh api -H 'Accept: application/vnd.github.raw' "repos/$GITHUB_REPOSITORY/contents/.github/prism.json" > "$RUNNER_TEMP/prism.json"
       - name: Allocate in the synthetic CFO.ai tables and read back
         if: ${{ !inputs.preflight_only }}
         env:
           RUN_ID: ${{ inputs.run_id }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
           PYTHONPATH: ${{ github.workspace }}/prism/src
         run: |
           python -m prism.cfo_actions "$RUNNER_TEMP/prism-estimate/estimate.json" "$RUN_ID" \
-            --output "$RUNNER_TEMP/cfo-allocation.json"
+            --issue-number "$ISSUE_NUMBER" --config "$RUNNER_TEMP/prism.json" --output "$RUNNER_TEMP/cfo-allocation.json"
       - uses: actions/upload-artifact@v4
         if: ${{ success() && !inputs.preflight_only }}
         with:

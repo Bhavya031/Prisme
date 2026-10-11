@@ -11,7 +11,7 @@ class EstimateAllocationWorkflow(unittest.TestCase):
         self.assertIn("estimated: ${{ steps.estimate.outcome == 'success' }}", estimate)
         self.assertIn("name: prism-estimate-${{ github.event.issue.number }}", estimate)
         self.assertIn("needs: estimate", allocation)
-        self.assertIn("if: github.repository == 'Bhavya031/k-2' && needs.estimate.outputs.estimated == 'true'", allocation)
+        self.assertIn("if: needs.estimate.outputs.estimated == 'true'", allocation)
         self.assertIn("RUN_ID: ${{ github.run_id }}", allocation)
         self.assertIn("ISSUE_NUMBER: ${{ github.event.issue.number }}", allocation)
         self.assertIn("repository: Bhavya031/Prisme\n          ref: main", allocation)

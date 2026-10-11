@@ -1,0 +1,18 @@
+{
+  "cfo": {
+    "org_id": "102909",
+    "scenario": "Main Scenario",
+    "page": "K2 budgets",
+    "budget_table": "K2 repository budgets",
+    "request_table": "K2 request allocations",
+    "column_prefix": "K2 "
+  },
+  "estimate": {
+    "provider": "claude",
+    "worker_model": "claude-sonnet-5-5",
+    "max_cost_usd": 0.05,
+    "max_output_tokens": 4000,
+    "max_extra_rounds": 1,
+    "timeout_seconds": 180
+  }
+}
