@@ -46,7 +46,7 @@ async def run(estimate: dict, allocation: dict, event: dict, checkout: Path, *, 
     issue_url = issue.get("html_url")
     commit = estimate["repository_commit"]
     worker = BudgetedWorker(estimate, allocation, request_id=allocation.get("request_id"), repository=repository,
-                            issue_url=issue_url, pinned_commit=commit, worker_model=estimate["worker_model"])
+                            issue_url=issue_url, pinned_commit=commit, worker_model=allocation.get("chosen_model"))
     if (issue.get("number") != allocation["issue"] or
             _git(checkout, "rev-parse", "HEAD") != commit or
             _git(checkout, "status", "--porcelain", "--untracked-files=all") or

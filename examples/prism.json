@@ -5,6 +5,7 @@
     "page": "K2 budgets",
     "budget_table": "K2 repository budgets",
     "request_table": "K2 request allocations",
+    "decision_table": "K2 decision test",
     "column_prefix": "K2 "
   },
   "estimate": {
