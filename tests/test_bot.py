@@ -189,6 +189,11 @@ class BotTests(unittest.TestCase):
             with mock.patch.object(github_context, "api_v2", return_value=[]), redirect_stdout(output):
                 cli.main(["issue-gate", "--event", str(path)])
             self.assertEqual(output.getvalue(), "note=\n")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                cli.main(["issue-comment", "--estimate", str(FIXTURES / "estimate-sympy-20590.json"),
+                          "--event", str(path), "--commit", "a" * 40])
+            self.assertIn(bot.source_marker(event(), "a" * 40), output.getvalue())
 
     def test_event_pairs_and_untrusted_text_stay_data(self):
         for repo, number, comment in (("one/repo", 12, None), ("two/project", 93, "/prism estimate")):
