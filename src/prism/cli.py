@@ -378,10 +378,11 @@ def main(argv=None) -> None:
                 check_budget(provider, **budget)
         except ValueError as error:
             raise SystemExit(f"prism predict: {error}") from None
-        try:
-            entire.ensure_ready(args.repo)
-        except RuntimeError as error:
-            raise SystemExit(str(error)) from None
+        if not args.checkout:
+            try:
+                entire.ensure_ready(args.repo)
+            except RuntimeError as error:
+                raise SystemExit(str(error)) from None
         tracing.init()
         try:
             with tracing.workflow("issue-to-files") as span:
