@@ -12,8 +12,7 @@ from urllib.parse import urlencode
 
 from . import results, solve
 
-# One run per this many minutes for the whole repository, to protect API credit.
-RATE_LIMIT_MINUTES = 10
+DEFAULT_COOLDOWN_MINUTES = 10
 COMMAND = "/prism estimate"
 INSIDERS = ("OWNER", "MEMBER", "COLLABORATOR")
 BOT_LOGIN = "github-actions[bot]"
@@ -56,20 +55,21 @@ def is_ours(comment: dict) -> bool:
     return (comment.get("user") or {}).get("login") == BOT_LOGIN and str(comment.get("body") or "").startswith(MARKER)
 
 
-def recent_comments_path(repo: str, now: datetime, page: int) -> str:
-    since = (now - timedelta(minutes=RATE_LIMIT_MINUTES)).strftime("%Y-%m-%dT%H:%M:%SZ")
+def recent_comments_path(repo: str, now: datetime, page: int, cooldown_minutes: int = DEFAULT_COOLDOWN_MINUTES) -> str:
+    since = (now - timedelta(minutes=cooldown_minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
     return f"repos/{repo}/issues/comments?{urlencode({'since': since, 'sort': 'updated', 'direction': 'desc', 'per_page': 100, 'page': page})}"
 
 
-def retry_after(comments: list[dict], now: datetime) -> datetime | None:
+def retry_after(comments: list[dict], now: datetime, cooldown_minutes: int = DEFAULT_COOLDOWN_MINUTES) -> datetime | None:
     """When the latest Prism reservation or result allows another run."""
     updates = [datetime.fromisoformat(comment["updated_at"].replace("Z", "+00:00"))
                for comment in comments if is_ours(comment)]
-    allowed = max(updates) + timedelta(minutes=RATE_LIMIT_MINUTES) if updates else now
+    allowed = max(updates) + timedelta(minutes=cooldown_minutes) if updates else now
     return allowed if allowed > now else None
 
 
-def gate(event: dict, fetch, now: datetime | None = None, *, commit: str | None = None) -> str | None:
+def gate(event: dict, fetch, now: datetime | None = None, *, commit: str | None = None,
+         cooldown_minutes: int = DEFAULT_COOLDOWN_MINUTES) -> str | None:
     """Refuse unauthorized, duplicate, or repository-rate-limited issue requests before model calls."""
     if reason := refusal(event):
         raise PermissionError(reason)
@@ -94,9 +94,11 @@ def gate(event: dict, fetch, now: datetime | None = None, *, commit: str | None 
                 break
         else:
             raise RuntimeError("too many issue comments to verify duplicate estimates")
+    if cooldown_minutes == 0:
+        return None
     for page in range(1, 101):
-        comments = fetch(recent_comments_path(event["repository"]["full_name"], now, page))
-        if allowed := retry_after(comments, now):
+        comments = fetch(recent_comments_path(event["repository"]["full_name"], now, page, cooldown_minutes))
+        if allowed := retry_after(comments, now, cooldown_minutes):
             break
         if len(comments) < 100:
             return None
@@ -104,7 +106,7 @@ def gate(event: dict, fetch, now: datetime | None = None, *, commit: str | None 
         raise RuntimeError("too many recent issue comments to verify the rate limit")
     if allowed is None:
         return None
-    return (f"Prism runs at most once every {RATE_LIMIT_MINUTES} minutes in this repository and made no model call "
+    return (f"Prism runs at most once every {cooldown_minutes} minutes in this repository and made no model call "
             f"for this request. Try again after {allowed:%H:%M} UTC with `{COMMAND}`.")
 
 

@@ -8,6 +8,7 @@
     "column_prefix": "K2 "
   },
   "estimate": {
+    "cooldown_minutes": 10,
     "provider": "claude",
     "worker_model": "claude-sonnet-5-5",
     "max_cost_usd": 0.05,
