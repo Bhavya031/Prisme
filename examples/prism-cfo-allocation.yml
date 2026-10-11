@@ -1,0 +1,57 @@
+name: Prism CFO allocation validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Saved k-2 Prism estimate run (issue 40)
+        required: true
+        default: "38138900610"
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: prism-cfo-allocation
+  cancel-in-progress: false
+
+jobs:
+  allocate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CFO_OAUTH_CLIENT_ID: ${{ secrets.CFO_OAUTH_CLIENT_ID }}
+      CFO_OAUTH_REFRESH_TOKEN: ${{ secrets.CFO_OAUTH_REFRESH_TOKEN }}
+      CFO_SECRET_WRITE_TOKEN: ${{ secrets.CFO_SECRET_WRITE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Bhavya031/Prisme
+          ref: ao/prisme-25/cfo-actions
+          path: prism
+          token: ${{ secrets.PRISME_READ_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download the saved estimate; no discovery or model call
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo 'run_id must be numeric' >&2; exit 1; }
+          gh run download "$RUN_ID" --repo Bhavya031/k-2 --name prism-estimate-40 --dir "$RUNNER_TEMP/prism-estimate"
+          test -s "$RUNNER_TEMP/prism-estimate/estimate.json"
+      - name: Allocate in the synthetic CFO.ai tables and read back
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+          PYTHONPATH: ${{ github.workspace }}/prism/src
+        run: |
+          python -m prism.cfo_actions "$RUNNER_TEMP/prism-estimate/estimate.json" "$RUN_ID" \
+            --output "$RUNNER_TEMP/cfo-allocation.json"
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: prism-cfo-allocation-${{ inputs.run_id }}
+          path: ${{ runner.temp }}/cfo-allocation.json
