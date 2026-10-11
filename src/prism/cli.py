@@ -20,6 +20,8 @@ def parser() -> argparse.ArgumentParser:
     predict.add_argument("--repo", required=True)
     predict.add_argument("--pr-url", help="target PR to exclude from a pre-merge benchmark prediction")
     predict.add_argument("--pre-merge-sha", help="pre-merge base commit; requires --pr-url")
+    predict.add_argument("--commit", help="immutable source commit for an issue prediction")
+    predict.add_argument("--event", type=Path, help="GitHub event JSON for the triggering issue title and body")
     predict.add_argument("--checkout", type=Path, help="git repository containing the pinned search commit")
     predict.add_argument("--provider", choices=("claude", "openai", "both"), default="both")
     predict.add_argument("--format", choices=("text", "json", "markdown"))
@@ -366,8 +368,21 @@ def main(argv=None) -> None:
             raise SystemExit("prism predict: --pre-merge-sha requires --pr-url")
         if args.pre_merge_sha and not args.checkout:
             raise SystemExit("prism predict: --pre-merge-sha requires --checkout for commit-scoped search")
-        if args.checkout and not args.pre_merge_sha:
-            raise SystemExit("prism predict: --checkout requires --pre-merge-sha")
+        if args.commit and (args.pr_url or args.pre_merge_sha):
+            raise SystemExit("prism predict: --commit cannot be combined with benchmark PR options")
+        if args.commit and not args.checkout:
+            raise SystemExit("prism predict: --commit requires --checkout for commit-scoped search")
+        if args.checkout and not (args.pre_merge_sha or args.commit):
+            raise SystemExit("prism predict: --checkout requires --commit or --pre-merge-sha")
+        issue_override = None
+        if args.event:
+            event = _read_json(args.event)
+            issue_override = event.get("issue") if isinstance(event, dict) else None
+            if (not isinstance(issue_override, dict) or
+                    not isinstance(issue_override.get("title"), str) or
+                    (event.get("repository") or {}).get("full_name") != args.repo.removeprefix("gh/") or
+                    issue_override.get("html_url") != args.issue_url or "pull_request" in issue_override):
+                raise SystemExit("prism predict: event issue does not match repository and issue URL")
         budget = {"max_cost_usd": args.max_cost_usd, "max_extra": args.max_extra_rounds,
                   "timeout_seconds": args.timeout_seconds}
         if args.max_output_tokens is not None:
@@ -389,6 +404,7 @@ def main(argv=None) -> None:
                 with tracing.step("collect-context", "TOOL"):
                     ctx = build_context(args.issue_url, entire_repo=args.repo,
                                         pr_url=args.pr_url, pre_merge_sha=args.pre_merge_sha,
+                                        commit=args.commit, issue_override=issue_override,
                                         search_checkout=args.checkout)
                 outcomes = asyncio.run(_predict(ctx, providers, budget))
             predictions, failed = [], {}

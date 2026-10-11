@@ -406,6 +406,7 @@ class BudgetTests(unittest.TestCase):
                       "--checkout", "/tmp/source"])
         build_context.assert_called_once_with("https://github.com/o/r/issues/1", entire_repo="gh/o/r",
                                               pr_url="https://github.com/o/r/pull/42", pre_merge_sha="a" * 40,
+                                              commit=None, issue_override=None,
                                               search_checkout=Path("/tmp/source"))
         prediction = json.loads(stdout.getvalue())["openai"]
         self.assertEqual((prediction["model"], prediction["cost_type"]), ("gpt-6-sol", "estimated_list_price"))

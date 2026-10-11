@@ -219,7 +219,7 @@ def _reference(fetch, ref: tuple[str, str, int], target: int | None, cutoff: str
 
 
 def _prefetch(pool: ThreadPoolExecutor, fetch, root: str, issue_number: int, owner: str, repo: str,
-              target: int | None, entire_repo: str) -> None:
+              target: int | None, entire_repo: str, commit: str | None = None) -> None:
     """Start the requests build_context is about to make, so its in-order pass finds them ready.
 
     Results and errors are kept by ``fetch`` and read again by that pass, so nothing here
@@ -229,7 +229,7 @@ def _prefetch(pool: ThreadPoolExecutor, fetch, root: str, issue_number: int, own
     target_path = f"{root}/pulls/{target}"
 
     def tree():
-        sha = _head_sha(fetch, root) if target is None else _parent_sha(fetch, root, fetch(target_path))
+        sha = (commit or _head_sha(fetch, root)) if target is None else _parent_sha(fetch, root, fetch(target_path))
         fetch(_tree_path(root, sha))
 
     def references():
@@ -264,32 +264,39 @@ def build_context(
     entire_repo: str,
     pr_url: str | None = None,
     pre_merge_sha: str | None = None,
+    commit: str | None = None,
+    issue_override: dict | None = None,
     search_checkout: Path | None = None,
 ) -> Context:
     issue_match = ISSUE_URL.fullmatch(issue_url)
     if not issue_match:
         raise ValueError("Bad issue URL")
     owner, repo, issue_text_number = issue_match.groups()
+    if pr_url is None and entire_repo != f"gh/{owner}/{repo}":
+        raise ValueError("Entire repository must match the issue repository (gh/owner/repo)")
     issue_number = int(issue_text_number)
     root = f"repos/{owner}/{repo}"
     pr_match = PR_URL.fullmatch(pr_url) if pr_url is not None else None
     paired = bool(pr_match) and pr_match.group(1, 2) == (owner, repo)
-    fetch = _Once()
+    original_fetch = _Once()
+    issue_path = f"{root}/issues/{issue_number}"
+    fetch = (lambda path: issue_override if path == issue_path else original_fetch(path)) if issue_override else original_fetch
     pool = ThreadPoolExecutor(max_workers=WORKERS, thread_name_prefix="prism-github")
     try:
         if pr_url is None or paired:
             _prefetch(pool, fetch, root, issue_number, owner, repo,
-                      int(pr_match.group(3)) if paired else None, entire_repo)
+                      int(pr_match.group(3)) if paired else None, entire_repo, commit)
         ctx = _collect(fetch, root, issue_number, owner, repo, pr_url is not None, pr_match if paired else None,
-                       pre_merge_sha, entire_repo)
-        ctx.search_commit, ctx.search_checkout = pre_merge_sha, search_checkout
+                       pre_merge_sha, entire_repo, commit)
+        ctx.search_commit, ctx.search_checkout = commit or pre_merge_sha, search_checkout
         return ctx
     finally:
         pool.shutdown(wait=True, cancel_futures=True)
 
 
 def _collect(fetch, root: str, issue_number: int, owner: str, repo: str, benchmark: bool,
-             pr_match: re.Match | None, pre_merge_sha: str | None, entire_repo: str) -> Context:
+             pr_match: re.Match | None, pre_merge_sha: str | None, entire_repo: str,
+             commit: str | None = None) -> Context:
     issue = fetch(f"{root}/issues/{issue_number}")
 
     target: int | None = None
@@ -310,7 +317,7 @@ def _collect(fetch, root: str, issue_number: int, owner: str, repo: str, benchma
             raise ValueError("Entire repository default branch does not match the pre-merge commit")
         known, repo_map = _tree(fetch, root, before)
     else:
-        known, repo_map = _tree(fetch, root, _head_sha(fetch, root))
+        known, repo_map = _tree(fetch, root, commit or _head_sha(fetch, root))
 
     title, body, issue_comments, issue_context = _issue_text(fetch, root, issue_number, issue, target, cutoff)
     references: list[dict] = []

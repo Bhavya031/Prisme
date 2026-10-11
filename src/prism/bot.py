@@ -25,8 +25,10 @@ def refusal(event: dict) -> str | None:
     if "pull_request" in issue:
         return "pull requests are not estimated"
     if comment is not None:
+        if (comment.get("user") or {}).get("type") == "Bot":
+            return "bot comments do not request estimates"
         body = str(comment.get("body") or "")
-        command = body.startswith(COMMAND) and (len(body) == len(COMMAND) or body[len(COMMAND)].isspace())
+        command = body == COMMAND
         if event.get("action") != "created" or not command:
             return f"not a new {COMMAND} comment"
         author = comment

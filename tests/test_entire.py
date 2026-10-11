@@ -58,6 +58,14 @@ class EntireTests(unittest.TestCase):
             entire._request("https://example.test")
         self.assertIsNone(raised.exception.__cause__)
 
+    def test_unregistered_repository_is_an_explicit_setup_error(self):
+        entire._repo_details.cache_clear()
+        self.addCleanup(entire._repo_details.cache_clear)
+        with mock.patch.dict(entire.os.environ, {"PRISM_ENTIRE_TRANSPORT": "http"}), \
+             mock.patch.object(entire, "_request", return_value={"repos": []}), \
+             self.assertRaisesRegex(RuntimeError, "Entire repository not found: gh/o/r"):
+            entire.ensure_ready("gh/o/r")
+
     def test_malformed_http_json_is_clean(self):
         with mock.patch.dict(entire.os.environ, {"ENTIRE_TOKEN": "token"}), \
              mock.patch.object(entire.urllib.request, "urlopen", return_value=io.StringIO("not json")), \
