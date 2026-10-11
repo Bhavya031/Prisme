@@ -36,3 +36,11 @@ class CFOAllocation(unittest.TestCase):
         other = {"request_id": "other", "repository": "elsewhere", "decision": "allocated", "reservation_usd": 20}
         result, _ = decide(REQUEST, BUDGET, POLICY, [other])
         self.assertEqual(result["available_balance"], 23.59585)
+
+    def test_budget_snapshot_does_not_double_count_allocation_rows(self):
+        budget = BUDGET | {"existing_reservations_usd": 10}
+        prior = {"request_id": "prior", "repository": "Bhavya031/k-2", "decision": "allocated", "reservation_usd": 10}
+        request = REQUEST | {"estimated_usd": 6}
+        result, row = decide(request, budget, {"max_budget_fraction": 0.5}, [prior])
+        self.assertEqual((result["decision"], result["available_balance"]), ("allocated", 9))
+        self.assertEqual(row["reservation_usd"], 6)

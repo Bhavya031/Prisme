@@ -4,7 +4,10 @@ from decimal import Decimal, InvalidOperation
 
 
 def decide(request: dict, budget: dict | None, policy: dict | None, allocations: list[dict]) -> tuple[dict, dict | None]:
-    """Return (structured decision, new reservation row); reuse an existing request ID."""
+    """Return (structured decision, new reservation row); reuse an existing request ID.
+
+    The budget snapshot's existing_reservations_usd includes all allocation rows.
+    """
     request_id = request["request_id"]
     if not request_id or not request["repository"]:
         raise ValueError("request_id and repository are required")
@@ -26,13 +29,11 @@ def decide(request: dict, budget: dict | None, policy: dict | None, allocations:
         spent = _usd(budget["spending_usd"])
         opening = _usd(budget["existing_reservations_usd"])
         fraction = Decimal(str(policy["max_budget_fraction"]))
-        reserved = sum((_usd(row["reservation_usd"]) for row in allocations
-                        if row["repository"] == request["repository"] and row["decision"] == "allocated"), Decimal(0))
     except (KeyError, InvalidOperation, TypeError, ValueError):
         return _blocked("budget, policy, or reservation data is invalid"), None
     if not fraction.is_finite() or not 0 < fraction <= 1:
         return _blocked("allocation policy fraction is invalid"), None
-    available = ceiling - spent - opening - reserved
+    available = ceiling - spent - opening
     if amount > available or amount > ceiling * fraction:
         return {"decision": "denied", "allocation_id": None, "allocated_usd_cap": 0,
                 "available_balance": float(available), "reason": "estimate exceeds available balance or policy cap"}, None
