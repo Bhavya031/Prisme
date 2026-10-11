@@ -174,6 +174,7 @@ def allocate(estimate_path, run_id, issue_number=40):
             "available_balance": values[PREFIX + "available balance USD"],
             "reason": values[PREFIX + "reason"],
         })
+    # CFO's synthetic budget field is opening reservations; request-table reservations are separate.
     budget["existing_reservations_usd"] += sum(row["reservation_usd"] for row in allocations
                                                 if row["repository"] == request["repository"] and row["decision"] == "allocated")
     decision, new_row = decide(request, budget, policy, allocations)

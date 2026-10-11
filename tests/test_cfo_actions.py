@@ -98,6 +98,24 @@ class CFOActions(unittest.TestCase):
                          (request_id, "Bhavya031/k-2", issue_url))
         self.assertEqual(call.call_count, 1)
 
+    def test_budget_opening_reservations_exclude_request_rows(self):
+        estimate = json.loads(self.estimate.read_text())
+        estimate["end_to_end_cost_estimate"]["central"]["usd"] = 6
+        self.estimate.write_text(json.dumps(estimate))
+        prior = OLD | {PREFIX + "reservation USD": 10}
+        new = BASE_ROW | {PREFIX + "estimated USD": 6, PREFIX + "allocated USD cap": 6,
+                          PREFIX + "reservation USD": 6, PREFIX + "available balance USD": 9}
+        reads = [(None, [("budget", BUDGET | {PREFIX + "max budget fraction": 0.5})]),
+                 (self.request_data, [("old", prior)]),
+                 (self.request_data, [("old", prior)]),
+                 (self.request_data, [("old", prior), (REQUEST_ID, new)])]
+        with patch.object(cfo_actions, "refresh_access_token", return_value="access"), \
+             patch.object(cfo_actions, "read_table", side_effect=reads), \
+             patch.object(cfo_actions, "mcp", side_effect=[{"capabilities": {}}, {}]) as call:
+            result = cfo_actions.allocate(self.estimate, 38138900610)
+        self.assertEqual(result["usd_cap"], 6)
+        self.assertEqual(call.call_args_list[1].args[2]["arguments"]["update"]["values"]["rows"][0][-2], 9)
+
     def test_secret_write_failure_does_not_rotate_refresh_token(self):
         secrets = {"CFO_OAUTH_CLIENT_ID": "client", "CFO_OAUTH_REFRESH_TOKEN": "refresh",
                    "CFO_SECRET_WRITE_TOKEN": "writer"}
