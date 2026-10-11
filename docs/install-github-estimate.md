@@ -24,6 +24,6 @@ Entire setup is the installer's responsibility. With an authenticated Entire CLI
 
 The workflow installs the Entire CLI pinned at v0.11.4 and uses Prism's default CLI transport. The previous HTTP transport was observed to return 403 at its hardcoded repository-list endpoint even for a known indexed repository. The CLI route had worked in an earlier runner. This change has not been run on a new runner.
 
-There is no workflow region variable: with `ENTIRE_TOKEN`, this CLI derives its server from the token and ignores saved login contexts. Obtain a token for the region containing the mirror. The CLI offers no supported server override for this noninteractive token path.
+The Entire region comes from the `ENTIRE_TOKEN` JWT audience. To use another region, log in to Entire in that region and create the token there. There is no workflow setting to change the region.
 
 On 2026-10-11, the bearer observed for `ENTIRE_TOKEN` was an eight-hour JWT (issued 02:50:04 UTC, expiring 10:50:04 UTC). The inspected CLI help exposed no API-key or service-token issuance command. Refresh the Actions secret before it expires until Entire provides a supported long-lived CI credential. This is an observation of that credential on that date, not a general token lifetime guarantee.
