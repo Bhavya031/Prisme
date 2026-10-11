@@ -60,6 +60,9 @@ class CFOActions(unittest.TestCase):
              patch.object(cfo_actions, "mcp", side_effect=[{"capabilities": {}}, {}]) as call:
             result = cfo_actions.allocate(self.estimate, 38138900610)
         self.assertEqual((result["request_id"], result["usd_cap"]), (REQUEST_ID, 1.40262))
+        self.assertEqual((result["request_row_count"], result["table_row_count"]), (1, 2))
+        self.assertAlmostEqual(result["request_reservation_usd"], 1.40262)
+        self.assertAlmostEqual(result["table_reservation_usd"], 2.80677)
         write = call.call_args_list[1].args[2]["arguments"]
         self.assertEqual(write["org_id"], "102909")
         self.assertEqual(write["update"]["target"], cfo_actions.REQUEST_TABLE)
@@ -75,6 +78,9 @@ class CFOActions(unittest.TestCase):
              patch.object(cfo_actions, "mcp", return_value={"capabilities": {}}) as call:
             result = cfo_actions.allocate(self.estimate, 38138900610)
         self.assertEqual(result["decision"], "allocated")
+        self.assertEqual((result["request_row_count"], result["table_row_count"]), (1, 2))
+        self.assertAlmostEqual(result["request_reservation_usd"], 1.40262)
+        self.assertAlmostEqual(result["table_reservation_usd"], 2.80677)
         self.assertEqual(call.call_count, 1)
 
     def test_secret_write_failure_does_not_rotate_refresh_token(self):

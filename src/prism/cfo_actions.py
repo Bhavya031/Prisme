@@ -219,7 +219,10 @@ def allocate_existing(access_token, request, request_id):
             "issue_url": request["issue_url"],
             "pinned_commit": request["pinned_commit"],
             "usd_cap": row[PREFIX + "allocated USD cap"],
-            "decision": row[PREFIX + "decision"], "reason": row[PREFIX + "reason"]}
+            "decision": row[PREFIX + "decision"], "reason": row[PREFIX + "reason"],
+            "request_row_count": len(matches), "table_row_count": len(rows),
+            "request_reservation_usd": sum(item[PREFIX + "reservation USD"] or 0 for item in matches),
+            "table_reservation_usd": sum(item[PREFIX + "reservation USD"] or 0 for _, item in rows)}
 
 
 def main():
