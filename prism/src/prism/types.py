@@ -48,3 +48,4 @@ class Prediction:
     condensed: bool
     usage: Usage
     estimated_cost_usd: float
+    budget: dict | None = None

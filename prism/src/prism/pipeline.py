@@ -32,10 +32,59 @@ _DECIDE_SCHEMA = {
 }
 
 
-def _safe_prompt(value: str, target_pr: int | None) -> str:
+BUDGET_NOTE = ("Cost is an estimate from token counts and list prices, checked after every model call. "
+               "One call can cross max_cost_usd before its usage is known; further calls stop once the estimate reaches it.")
+
+
+class BudgetStop(RuntimeError):
+    """A budget ended the prediction before it had an answer; `spent` holds what the finished calls used."""
+
+    def __init__(self, message: str, spent: dict):
+        super().__init__(message)
+        self.spent = spent
+
+
+def _spent(provider: str, usages: list[Usage], limits: dict, stopped_by: str | None) -> dict:
+    usage = _combined_usage(usages, provider)
+    cost = models.estimate_cost(provider, usage)
+    return {
+        "model_calls": len(usages),
+        "usage": usage,
+        "estimated_cost_usd": cost,
+        "budget": {
+            **limits,
+            "extra_rounds_used": max(0, len(usages) - 2),
+            "stopped_by": stopped_by,
+            "over_max_cost": limits["max_cost_usd"] is not None and cost >= limits["max_cost_usd"],
+            "note": BUDGET_NOTE,
+        },
+    }
+
+
+def _safe_prompt(value: str, target_pr: int | None, provider: str | None = None,
+                 max_output_tokens: int = models.MAX_TOKENS) -> str:
     if target_pr is not None and github_context._target_mention(target_pr).search(value):
         raise ValueError("Target PR reference leaked into model prompt")
+    limits = models.LIMITS.get(models._model(provider)) if provider else None
+    # Four bytes per token undercounts, so this only rejects a prompt the provider would refuse as well.
+    if limits and (len(value.encode()) + len(models.SYSTEM.encode())) // 4 + max_output_tokens > limits["context"]:
+        raise ValueError("Input and reserved output exceed model context window")
     return value
+
+
+def check_budget(provider: str, *, max_cost_usd: float | None = None, max_output_tokens: int = models.MAX_TOKENS,
+                 max_extra: int = 1, timeout_seconds: float | None = None) -> None:
+    """Reject a budget that cannot work, naming the limit at fault."""
+    if max_cost_usd is not None and max_cost_usd <= 0:
+        raise ValueError("max_cost_usd must be positive")
+    if timeout_seconds is not None and timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be positive")
+    if max_extra < 0:
+        raise ValueError("max_extra rounds must not be negative")
+    ceiling = models.LIMITS.get(models._model(provider), {}).get("max_output")
+    if max_output_tokens < 1 or (ceiling is not None and max_output_tokens > ceiling):
+        raise ValueError("max_output_tokens must be at least 1"
+                         + (f" and at most {ceiling} for {models._model(provider)}" if ceiling else ""))
 
 
 def _grouped(terms: list[str], ctx: Context, plan: dict) -> dict:
@@ -96,7 +145,48 @@ def _combined_usage(parts: list[Usage], provider: str) -> Usage:
     )
 
 
-async def predict(ctx: Context, provider: str) -> Prediction:
+async def predict(ctx: Context, provider: str, *, max_cost_usd: float | None = None,
+                  max_output_tokens: int = models.MAX_TOKENS, max_extra: int = 1,
+                  timeout_seconds: float | None = None) -> Prediction:
+    """Predict files for one provider, optionally bounded by cost, output, retrieval and time budgets."""
+    check_budget(provider, max_cost_usd=max_cost_usd, max_output_tokens=max_output_tokens,
+                 max_extra=max_extra, timeout_seconds=timeout_seconds)
+    limits = {"max_cost_usd": max_cost_usd, "max_output_tokens": max_output_tokens,
+              "max_extra_rounds": max_extra, "timeout_seconds": timeout_seconds}
+    usages: list[Usage] = []
+    run = _predict(ctx, provider, limits, usages)
+    deadline = asyncio.timeout(timeout_seconds)
+    try:
+        async with deadline:
+            return await run
+    except BudgetStop:
+        raise
+    except models.Truncated as error:
+        usages.append(error.usage)
+        raise BudgetStop(f"{error}; no prediction made", _spent(provider, usages, limits, "max_output_tokens")) from None
+    except models.BilledError as error:
+        # Not a budget stop, but the failed call still counts toward what was spent.
+        usages.append(error.usage)
+        error.spent = _spent(provider, usages, limits, None)
+        raise
+    except TimeoutError:
+        # A network read timeout inside the pipeline is not the prediction deadline.
+        if not deadline.expired():
+            raise
+        # The call cut off mid-flight reported no usage and may still be billed.
+        raise BudgetStop(f"Prediction timed out after {timeout_seconds:g}s with {len(usages)} model call(s) finished; "
+                         "a call in flight may still be billed", _spent(provider, usages, limits, "timeout_seconds")) from None
+
+
+async def _predict(ctx: Context, provider: str, limits: dict, usages: list[Usage]) -> Prediction:
+    max_cost_usd, max_output_tokens, max_extra = limits["max_cost_usd"], limits["max_output_tokens"], limits["max_extra_rounds"]
+
+    def safe_prompt(value: str) -> str:
+        return _safe_prompt(value, ctx.target_pr, provider, max_output_tokens)
+
+    def spent(parts: list[Usage]) -> float:
+        return models.estimate_cost(provider, _combined_usage(parts, provider))
+
     bundle = asdict(ctx.bundle)
     condensed = len(json.dumps(bundle)) // 4 > 8000
     plan_prompt = (
@@ -105,7 +195,11 @@ async def predict(ctx: Context, provider: str) -> Prediction:
         + ("The context is large: also produce an EXTRACTIVE brief preserving exact quotes, identifiers, paths and errors. " if condensed else "Set brief to an empty string. ")
         + "\n\nContext:\n" + json.dumps(bundle, ensure_ascii=False)
     )
-    plan, first_usage = await models.call(provider, "plan", _safe_prompt(plan_prompt, ctx.target_pr), _PLAN_SCHEMA)
+    plan, first_usage = await models.call(provider, "plan", safe_prompt(plan_prompt), _PLAN_SCHEMA, max_output_tokens)
+    usages.append(first_usage)
+    if max_cost_usd is not None and spent(usages) >= max_cost_usd:
+        raise BudgetStop(f"Model cost budget reached after plan: estimated ${spent(usages):.6f} "
+                         f"of ${max_cost_usd:g}, no prediction made", _spent(provider, usages, limits, "max_cost_usd"))
     terms = list(dict.fromkeys(term.strip() for term in plan["search_terms"] if term.strip()))[:10]
     if not terms:
         raise ValueError(f"{provider} returned no search terms")
@@ -123,26 +217,34 @@ async def predict(ctx: Context, provider: str) -> Prediction:
         + "\n\nPlan:\n" + json.dumps(plan, ensure_ascii=False)
         + "\n\nSearch results and file candidates:\n" + json.dumps(grouped, ensure_ascii=False)
     )
-    answer, second_usage = await models.call(provider, "decide", _safe_prompt(decide_prompt, ctx.target_pr), _DECIDE_SCHEMA)
-    usages = [first_usage, second_usage]
-    used_more = False
-    need_more = answer.get("need_more")
-    if isinstance(need_more, str) and need_more.strip():
+    answer, second_usage = await models.call(provider, "decide", safe_prompt(decide_prompt), _DECIDE_SCHEMA, max_output_tokens)
+    usages.append(second_usage)
+    stopped_by = None
+    extra_prompt = decide_prompt
+    seen_requests = set()
+    for _ in range(max_extra):
+        need_more = answer.get("need_more")
+        if not isinstance(need_more, str) or not need_more.strip() or need_more in seen_requests:
+            break
+        # Checked after every call: the call that crosses the limit is already spent.
+        if max_cost_usd is not None and spent(usages) >= max_cost_usd:
+            stopped_by = "max_cost_usd"
+            break
+        seen_requests.add(need_more)
         with tracing.step(f"{provider}-reference", "TOOL"):
             extra = await asyncio.to_thread(github_context.fetch_reference, need_more, ctx)
-        if extra:
-            used_more = True
-            answer, more_usage = await models.call(
-                provider, "decide", _safe_prompt(decide_prompt + "\n\nAdditional referenced item:\n" + json.dumps(extra), ctx.target_pr), _DECIDE_SCHEMA
-            )
-            usages.append(more_usage)
+        if not extra:
+            break
+        extra_prompt += "\n\nAdditional referenced item:\n" + json.dumps(extra)
+        answer, more_usage = await models.call(provider, "decide", safe_prompt(extra_prompt), _DECIDE_SCHEMA, max_output_tokens)
+        usages.append(more_usage)
+    used_more = len(usages) > 2
 
     by_category = {category: sorted(set(answer[category])) for category in _CATEGORIES}
     all_paths = set().union(*by_category.values())
     dropped = sorted(all_paths - ctx.known_paths)
     by_category = {category: sorted(set(paths) & ctx.known_paths) for category, paths in by_category.items()}
     predicted = sorted(set().union(*by_category.values()))
-    usage = _combined_usage(usages, provider)
     return Prediction(
         provider=provider,
         by_category=by_category,
@@ -151,6 +253,5 @@ async def predict(ctx: Context, provider: str) -> Prediction:
         model_calls=len(usages),
         need_more_used=used_more,
         condensed=condensed,
-        usage=usage,
-        estimated_cost_usd=models.estimate_cost(provider, usage),
+        **{key: value for key, value in _spent(provider, usages, limits, stopped_by).items() if key != "model_calls"},
     )
