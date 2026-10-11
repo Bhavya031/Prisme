@@ -106,6 +106,18 @@ class BotTests(unittest.TestCase):
         completed = bot.render(prediction, estimate)
         self.assertIn("known subtotal $0.0181", completed)
         self.assertIn("additional spend unknown for openai", completed)
+        self.assertIn("excludes unknown discovery spend", completed)
+
+    def test_timeout_after_recorded_usage_still_has_unknown_additional_spend(self):
+        prediction = json.loads((FIXTURES / "predict-httpx-2788.json").read_text())
+        prediction["openai"] = {"status": "failed", "estimated_cost_usd": 0.003,
+                                "model_calls": 1, "budget": {"stopped_by": "timeout_seconds"}}
+        estimate = json.loads((FIXTURES / "estimate-sympy-20590.json").read_text())["estimate"]
+        estimate["discovery_actual_cost"] = bot.solve.discovery_cost(prediction)
+        for rendered in (bot.render(prediction, None), bot.render(prediction, estimate)):
+            self.assertIn("known subtotal $0.0211", rendered)
+            self.assertIn("additional spend unknown for openai", rendered)
+        self.assertIn("excludes unknown discovery spend", bot.render(prediction, estimate))
 
     def test_cli_renders_saved_json_and_gates_without_network(self):
         output = io.StringIO()

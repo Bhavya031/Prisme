@@ -88,11 +88,12 @@ def _levels(values: dict, show) -> str:
     return " / ".join(show(values[name]) for name in solve.LEVELS)
 
 
-def _unpriced_failures(prediction: dict | None) -> list[str]:
+def _unknown_spend_failures(prediction: dict | None) -> list[str]:
     return [provider for provider in results.PROVIDERS
             if isinstance((prediction or {}).get(provider), dict)
             and prediction[provider].get("status") == "failed"
-            and "estimated_cost_usd" not in prediction[provider]]
+            and ("estimated_cost_usd" not in prediction[provider]
+                 or (prediction[provider].get("budget") or {}).get("stopped_by") == "timeout_seconds")]
 
 
 def _spent(prediction: dict | None) -> str:
@@ -103,7 +104,7 @@ def _spent(prediction: dict | None) -> str:
     except (ValueError, TypeError, AttributeError):
         return "unknown; no token usage was recorded, and a call in flight may still be billed"
     calls = sum(run["model_calls"] or 0 for run in discovery["runs"].values())
-    unknown = _unpriced_failures(prediction)
+    unknown = _unknown_spend_failures(prediction)
     subtotal = "known subtotal " if unknown else ""
     extra = f"; additional spend unknown for {', '.join(unknown)}" if unknown else ""
     return (f"{subtotal}{_usd(discovery['usd'])} on file discovery ({calls} model call(s)); "
@@ -145,7 +146,7 @@ def render(prediction: dict | None = None, estimate: dict | None = None, error: 
     if excluded := measurement.get("excluded_paths"):
         files += "; not measured: " + ", ".join(_code(item["path"]) for item in excluded)
     calls = sum(run.get("model_calls") or 0 for run in discovery["runs"].values())
-    unknown = _unpriced_failures(prediction)
+    unknown = _unknown_spend_failures(prediction)
     spent = ("known subtotal " if unknown else "") + _usd(discovery["usd"])
     spent += (f" ({calls} model call(s))" if discovery["runs"] else "")
     if unknown:
@@ -158,7 +159,8 @@ def render(prediction: dict | None = None, estimate: dict | None = None, error: 
         (f"Solve token estimate ({spread})", _levels(estimate["solve_token_estimate"], lambda level: f"{level['total']:,}")),
         (f"Solve cost estimate ({spread})", _levels(estimate["solve_cost_estimate"], lambda level: _usd(level["usd"]))),
         ("Discovery actual cost (separate from solving)", spent),
-        (f"End-to-end estimate ({spread})", _levels(estimate["end_to_end_cost_estimate"], lambda level: _usd(level["usd"]))),
+        (f"End-to-end estimate ({spread})", _levels(estimate["end_to_end_cost_estimate"], lambda level: _usd(level["usd"]))
+         + ("; excludes unknown discovery spend" if unknown else "")),
         ("Worker model", _code(estimate["worker_model"])),
         ("Repository commit", _code(estimate["repository_commit"])),
     ]
