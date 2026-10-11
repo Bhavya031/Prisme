@@ -153,8 +153,11 @@ jobs:
           }
           python -c 'import os; from prism import glance; glance.measure("count check", glance=os.environ["PRISM_GLANCE"])' > /dev/null
           status=0
+          # Entire names candidate files for a live issue; a replay searches only the pinned commit.
+          search=entire
+          if [ -n "$REPLAY_REF" ]; then search=git; fi
           prism predict "$issue_url" --repo "$entire_repo" --event "$GITHUB_EVENT_PATH" \
-            --commit "$commit" --checkout source \
+            --commit "$commit" --checkout source --search "$search" \
             --provider claude --format json --max-cost-usd 0.10 --max-output-tokens 4000 \
             --max-extra-rounds 1 --timeout-seconds 180 > predict.json 2> predict.err || status=$?
           if [ "$status" -eq 0 ]; then

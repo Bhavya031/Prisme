@@ -23,6 +23,9 @@ def parser() -> argparse.ArgumentParser:
     predict.add_argument("--commit", help="immutable source commit for an issue prediction")
     predict.add_argument("--event", type=Path, help="GitHub event JSON for the triggering issue title and body")
     predict.add_argument("--checkout", type=Path, help="git repository containing the pinned search commit")
+    predict.add_argument("--search", choices=("entire", "git"),
+                         help="where candidate files come from (default: git with --checkout, else entire); with a "
+                              "pinned commit, entire supplies paths only and line text is read at that commit")
     predict.add_argument("--provider", choices=("claude", "openai", "both"), default="both")
     predict.add_argument("--format", choices=("text", "json", "markdown"))
     predict.add_argument("--max-cost-usd", type=float, default=None,
@@ -161,6 +164,9 @@ def _print_predictions(predictions, output_format, trace_id=None, failed=None):
                 print(f"### {category}")
                 for path in prediction["by_category"].get(category, []):
                     print(f"- `{path}`")
+            if discovery := prediction.get("discovery"):
+                print(f"Search source: {discovery['source']} (pinned commit: {discovery['pinned_commit'] or 'none'}; "
+                      f"Entire index freshness: {discovery.get('entire_index_freshness', 'not used')})")
             print(f"Model calls: {prediction['model_calls']}")
             print(f"Estimated file-discovery cost: ${prediction['estimated_cost_usd']:.8f}")
             if (prediction.get("budget") or {}).get("over_max_cost"):
@@ -378,6 +384,8 @@ def main(argv=None) -> None:
             raise SystemExit("prism predict: --commit requires --checkout for commit-scoped search")
         if args.checkout and not (args.pre_merge_sha or args.commit):
             raise SystemExit("prism predict: --checkout requires --commit or --pre-merge-sha")
+        if args.search == "git" and not args.checkout:
+            raise SystemExit("prism predict: --search git requires --checkout")
         issue_override = None
         if args.event:
             event = _read_json(args.event)
@@ -397,7 +405,7 @@ def main(argv=None) -> None:
                 check_budget(provider, **budget)
         except ValueError as error:
             raise SystemExit(f"prism predict: {error}") from None
-        if not args.checkout:
+        if (args.search or ("git" if args.checkout else "entire")) == "entire":
             try:
                 entire.ensure_ready(args.repo)
             except RuntimeError as error:
@@ -410,6 +418,7 @@ def main(argv=None) -> None:
                                         pr_url=args.pr_url, pre_merge_sha=args.pre_merge_sha,
                                         commit=args.commit, issue_override=issue_override,
                                         search_checkout=args.checkout)
+                    ctx.search_source = args.search
                 outcomes = asyncio.run(_predict(ctx, providers, budget))
             predictions, failed = [], {}
             for provider, outcome in zip(providers, outcomes):

@@ -87,10 +87,34 @@ def check_budget(provider: str, *, max_cost_usd: float | None = None, max_output
                          + (f" and at most {ceiling} for {models._model(provider)}" if ceiling else ""))
 
 
-def _grouped(terms: list[str], ctx: Context, plan: dict) -> dict:
-    hits_by_term = (entire.search_many_at_commit(terms, ctx.search_checkout, ctx.search_commit)
-                    if ctx.search_commit else entire.search_many(terms, ctx.entire_repo))
+def _grouped(terms: list[str], ctx: Context, plan: dict) -> tuple[dict, dict]:
+    """The search results shown to the model, and a record of which search produced them."""
+    source = ctx.search_source or ("git" if ctx.search_commit else "entire")
+    if source == "git":
+        hits_by_term = entire.search_many_at_commit(terms, ctx.search_checkout, ctx.search_commit)
+    else:
+        hits_by_term = entire.search_many(terms, ctx.entire_repo)
+    found = {hit.path for hits in hits_by_term.values() for hit in hits}
+    kept = sorted(found & ctx.known_paths)
+    discovery = {
+        "source": source,
+        "command": "git grep at the pinned commit" if source == "git" else "entire search --code",
+        "pinned_commit": ctx.search_commit,
+        "line_text_from": "pinned commit" if ctx.search_commit else "Entire index",
+        "terms": terms,
+        "hits_per_term": {term: len(hits_by_term.get(term, [])) for term in terms},
+        "candidates_kept": kept,
+        "candidates_dropped": sorted(found - ctx.known_paths),
+    }
     files: dict[str, dict] = defaultdict(lambda: {"hit_count": 0, "terms": set(), "lines": []})
+    if source == "entire":
+        # `entire repo view --json` (CLI v0.11.4) reports no indexed commit or time.
+        discovery["entire_index_freshness"] = "unavailable"
+        if ctx.search_commit:
+            # The index may be newer than the pin: keep only Entire's paths and read the lines at the pin.
+            hits_by_term = entire.search_many_at_commit(terms, ctx.search_checkout, ctx.search_commit, kept)
+            for path in kept:
+                files[path]
     for term in terms:
         for hit in hits_by_term.get(term, []):
             if hit.path not in ctx.known_paths:
@@ -133,7 +157,7 @@ def _grouped(terms: list[str], ctx: Context, plan: dict) -> dict:
             for path in candidates[:40]
         ],
         "searched_terms": terms,
-    }
+    }, discovery
 
 
 def _combined_usage(parts: list[Usage], provider: str) -> Usage:
@@ -210,7 +234,7 @@ async def _predict(ctx: Context, provider: str, limits: dict, usages: list[Usage
         raise ValueError(f"{provider} returned no search terms")
 
     with tracing.step(f"{provider}-search", "TOOL"):
-        grouped = await asyncio.to_thread(_grouped, terms, ctx, plan)
+        grouped, discovery = await asyncio.to_thread(_grouped, terms, ctx, plan)
     context = plan["brief"] if condensed and plan["brief"] else bundle
     decide_prompt = (
         "Predict ALL existing files a maintainer would modify in the fixing PR. "
@@ -258,5 +282,6 @@ async def _predict(ctx: Context, provider: str, limits: dict, usages: list[Usage
         model_calls=len(usages),
         need_more_used=used_more,
         condensed=condensed,
+        discovery=discovery,
         **{key: value for key, value in _spent(provider, usages, limits, stopped_by).items() if key != "model_calls"},
     )

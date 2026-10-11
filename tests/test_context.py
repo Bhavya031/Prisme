@@ -31,7 +31,8 @@ class ContextTests(unittest.TestCase):
             ctx = Context(Bundle({}, [], [], {}), {"src/a.py"}, set(), None, 42, "gh/o/r",
                           search_commit=before, search_checkout=root)
             with mock.patch.object(entire, "search_many", side_effect=AssertionError("unscoped search")):
-                grouped = pipeline._grouped(["shared", "gold"], ctx, {"expected_file_kinds": []})
+                grouped, discovery = pipeline._grouped(["shared", "gold"], ctx, {"expected_file_kinds": []})
+            self.assertEqual((discovery["source"], discovery["pinned_commit"]), ("git", before))
             self.assertEqual(grouped["files"][0]["lines"], ["1: shared safe source"])
             self.assertNotIn("gold", json.dumps(grouped["files"]))
             ctx.search_checkout = None

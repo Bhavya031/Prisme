@@ -22,6 +22,8 @@ class Context:
     entire_repo: str
     search_commit: str | None = None
     search_checkout: Path | None = None
+    # "entire" or "git"; None keeps the old rule: git when a commit is pinned, else Entire.
+    search_source: str | None = None
 
 
 @dataclass
@@ -52,3 +54,4 @@ class Prediction:
     usage: Usage
     estimated_cost_usd: float
     budget: dict | None = None
+    discovery: dict | None = None

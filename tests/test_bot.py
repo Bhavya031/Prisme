@@ -166,6 +166,16 @@ class BotTests(unittest.TestCase):
         self.assertIn("go install github.com/entireio/cli/cmd/entire@v0.11.4", run)
         self.assertLess(run.index('export PATH="$GOBIN:$PATH"'), run.index("from prism.entire import ensure_ready"))
 
+    def test_template_searches_entire_for_live_issues_and_git_for_replays(self):
+        workflow = (Path(__file__).parents[1] / "examples/prism-estimate.yml").read_text()
+        choice = 'search=entire\n          if [ -n "$REPLAY_REF" ]; then search=git; fi\n'
+        self.assertIn(choice, workflow)
+        self.assertIn('--commit "$commit" --checkout source --search "$search"', workflow)
+        for replay_ref, expected in (("", "entire"), ("v1.0", "git")):
+            result = subprocess.run(["bash", "-c", choice.replace("          ", "") + 'echo "$search"'],
+                                    env=os.environ | {"REPLAY_REF": replay_ref}, capture_output=True, text=True)
+            self.assertEqual(result.stdout.strip(), expected)
+
     def test_saved_estimate_table_and_saved_prediction_spend(self):
         saved = json.loads((FIXTURES / "estimate-sympy-20590.json").read_text())["estimate"]
         prediction = json.loads((FIXTURES / "predict-httpx-2788.json").read_text())
