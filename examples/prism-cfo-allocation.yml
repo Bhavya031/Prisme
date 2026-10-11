@@ -1,4 +1,4 @@
-name: Prism CFO allocation validation
+name: Prism automated estimation and allocation validation
 
 on:
   workflow_dispatch:
