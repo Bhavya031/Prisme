@@ -185,20 +185,21 @@ flowchart LR
 ### Package layout and contracts (created in step 0)
 
 ```
-prism/
-  pyproject.toml            # E owns
-  src/prism/
-    __init__.py
-    types.py                # step 0 owns; frozen after step 0
-    github_context.py       # A owns
-    entire.py               # B owns
-    models.py               # C owns
-    tracing.py              # C owns
-    pipeline.py             # D owns
-    benchmark.py            # D owns
-    cli.py                  # E owns
-  data/                     # manifest + results (copy from this folder)
-  .github/workflows/prism.yml   # F owns
+pyproject.toml            # E owns
+src/prism/
+  __init__.py
+  types.py                # step 0 owns; frozen after step 0
+  github_context.py       # A owns
+  entire.py               # B owns
+  models.py               # C owns
+  tracing.py              # C owns
+  pipeline.py             # D owns
+  benchmark.py            # D owns
+  cli.py                  # E owns
+  data/                   # packaged copy of the default manifest
+tests/
+data/                     # manifests + results
+.github/workflows/prism.yml   # F owns
 ```
 
 `types.py` (plain dataclasses, no logic):
