@@ -17,6 +17,7 @@ on:
 permissions:
   actions: read
   contents: read
+  issues: write
 
 concurrency:
   group: prism-cfo-allocation
@@ -71,6 +72,7 @@ jobs:
           test -s "$RUNNER_TEMP/prism-estimate/estimate.json"
           gh api -H 'Accept: application/vnd.github.raw' "repos/$GITHUB_REPOSITORY/contents/.github/prism.json" > "$RUNNER_TEMP/prism.json"
       - name: Allocate in the synthetic CFO.ai tables and read back
+        id: allocation
         if: ${{ !inputs.preflight_only }}
         env:
           RUN_ID: ${{ inputs.run_id }}
@@ -79,8 +81,17 @@ jobs:
         run: |
           python -m prism.cfo_actions "$RUNNER_TEMP/prism-estimate/estimate.json" "$RUN_ID" \
             --issue-number "$ISSUE_NUMBER" --config "$RUNNER_TEMP/prism.json" --output "$RUNNER_TEMP/cfo-allocation.json"
+      - name: Report budget allocation on the issue
+        if: always() && steps.allocation.outcome != 'skipped'
+        env:
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: |
+          if [ -s "$RUNNER_TEMP/cfo-allocation.json" ]; then
+            note=$(jq -r 'if .decision == "allocated" then "Prism budget allocation: allocated. Cap $\(.usd_cap) reserved. Request \(.request_id)" else "Prism budget allocation: \(.decision). \(.reason)" end' "$RUNNER_TEMP/cfo-allocation.json")
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$note" || echo 'Could not post budget allocation comment' >&2
+          fi
       - uses: actions/upload-artifact@v4
-        if: ${{ success() && !inputs.preflight_only }}
+        if: always() && steps.allocation.outcome != 'skipped'
         with:
           name: prism-cfo-allocation-${{ inputs.run_id }}
           path: ${{ runner.temp }}/cfo-allocation.json

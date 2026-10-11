@@ -157,8 +157,8 @@ def allocate(estimate_path, run_id, issue_number):
         raise RuntimeError("CFO request table shape changed")
     budget_matches = [values for _, values in budget_rows if values.get(PREFIX + "repository") == repository]
     if len(budget_matches) != 1:
-        raise RuntimeError(f"CFO allocation stopped: blocked: {len(budget_matches)} budget rows for {repository} "
-                           f"in {CFO['budget_table']}; exactly one is required")
+        return {"request_id": request_id, "decision": "blocked", "usd_cap": None,
+                "reason": f"{len(budget_matches)} budget rows for {repository} in {CFO['budget_table']}; exactly one is required"}
     budget_values = budget_matches[0]
     budget = {"repository": budget_values[PREFIX + "repository"],
               "budget_usd": budget_values[PREFIX + "budget USD"],
@@ -186,7 +186,8 @@ def allocate(estimate_path, run_id, issue_number):
                                                 if row["repository"] == request["repository"] and row["decision"] == "allocated")
     decision, new_row = decide(request, budget, policy, allocations)
     if decision["decision"] != "allocated":
-        raise RuntimeError("CFO allocation stopped: " + decision["reason"])
+        return {"request_id": request_id, "decision": decision["decision"], "usd_cap": None,
+                "reason": decision["reason"]}
     if new_row:
         # Re-read immediately before the additive write; only this namespaced member is touched.
         latest_data, latest_rows = read_table(access_token, CFO["request_table"], 4)
@@ -254,6 +255,8 @@ def main():
         result = allocate(args.estimate_json, args.run_id, args.issue_number)
         Path(args.output).write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps(result))
+        if result["decision"] != "allocated":
+            parser.exit(1, "CFO allocation stopped: " + result["reason"] + "\n")
     except (OSError, KeyError, ValueError, RuntimeError) as error:
         parser.exit(1, f"{error}\n")
 
