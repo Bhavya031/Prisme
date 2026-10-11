@@ -1,0 +1,196 @@
+name: Prism estimate
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  acknowledge:
+    if: >-
+      !github.event.issue.pull_request &&
+      ((github.event_name == 'issues' &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association)) ||
+       (github.event_name == 'issue_comment' && github.event.comment.user.type != 'Bot' &&
+        github.event.comment.body == '/prism estimate' &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Acknowledge the request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          if [ -n "$COMMENT_ID" ]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=eyes > /dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/reactions" -f content=eyes > /dev/null
+          fi
+  estimate:
+    if: >-
+      !github.event.issue.pull_request &&
+      ((github.event_name == 'issues' &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association)) ||
+       (github.event_name == 'issue_comment' && github.event.comment.user.type != 'Bot' &&
+        github.event.comment.body == '/prism estimate' &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)))
+    # Serialize all issues so the repository-wide reservation is visible before another gate runs.
+    concurrency: prism-estimate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      PRISM_SKIP_DOTENV: "1"
+      ENTIRE_TOKEN: ${{ secrets.ENTIRE_TOKEN }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      REPLAY_REF: ${{ vars.PRISM_REPLAY_REF }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      WORKER_MODEL: claude-sonnet-5-5
+      PRISM_COMMIT: 68901f8dfe438feb4a24aff81183958d18b114c6
+      GLANCE_COMMIT: 3465201a46801c96fe57958306e36eb3b3132679
+    steps:
+      - uses: actions/setup-python@v5
+        id: setup_python
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@v5
+        id: setup_go
+        with:
+          go-version: stable
+      - name: Install pinned Prism
+        id: install
+        env:
+          GIT_TERMINAL_PROMPT: "0"
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.PRISME_READ_TOKEN }}@github.com/Bhavya031/Prisme.insteadOf
+          GIT_CONFIG_VALUE_0: https://github.com/Bhavya031/Prisme
+        run: pip install "git+https://github.com/Bhavya031/Prisme.git@$PRISM_COMMIT" > /dev/null 2>&1
+      - name: Resolve one immutable source commit
+        id: source
+        run: |
+          ref="$REPLAY_REF"
+          if [ -z "$ref" ]; then ref=$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch); fi
+          encoded_ref=$(jq -rn --arg ref "$ref" '$ref | @uri')
+          commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$encoded_ref" --jq .sha)
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { echo 'Could not resolve a source commit' >&2; exit 1; }
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "Source commit: $commit"
+      - name: Check event, authorization, duplicates, and repository cooldown
+        id: gate
+        run: prism issue-gate --event "$GITHUB_EVENT_PATH" --commit "${{ steps.source.outputs.commit }}" >> "$GITHUB_OUTPUT"
+      - name: Report repository cooldown
+        if: steps.gate.outputs.note != ''
+        env:
+          NOTE: ${{ steps.gate.outputs.note }}
+        # This reply has no Prism marker, so it cannot extend the cooldown or replace an estimate.
+        run: gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$NOTE"
+      - name: Reserve this issue before any paid call
+        id: reserve
+        if: steps.gate.outputs.note == ''
+        run: |
+          printf '%s\n' '<!-- prism-estimate -->' '<!-- prism-loading -->' \
+            '### ⏳ Estimating' '' "Started: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
+            "[Workflow run]($RUN_URL)" > comment.md
+          id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" --jq \
+            '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- prism-estimate -->"))) | .id' | tail -n 1)
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@comment.md > /dev/null
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" -F body=@comment.md > /dev/null
+          fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.note == ''
+        with:
+          ref: ${{ steps.source.outputs.commit }}
+          path: source
+          persist-credentials: false
+      - name: Run estimate
+        id: estimate
+        if: steps.gate.outputs.note == ''
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOPRIVATE: github.com/Bhavya031/*
+          GOBIN: ${{ runner.temp }}/bin
+          PRISM_GLANCE: ${{ runner.temp }}/bin/glance
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.GLANCE_READ_TOKEN }}@github.com/Bhavya031/Glance.insteadOf
+          GIT_CONFIG_VALUE_0: https://github.com/Bhavya031/Glance
+        run: |
+          set -euo pipefail
+          jq -e --arg repo "$GITHUB_REPOSITORY" --argjson number "$ISSUE_NUMBER" \
+            '.repository.full_name == $repo and .issue.number == $number and (.issue.pull_request | not)' \
+            "$GITHUB_EVENT_PATH" > /dev/null
+          issue_url=$(jq -r '.issue.html_url' "$GITHUB_EVENT_PATH")
+          expected_url="https://github.com/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER"
+          [ "$issue_url" = "$expected_url" ] || { echo 'Event issue URL does not match this repository and issue' >&2; exit 1; }
+          jq -r '[.issue.title, (.issue.body // "")] | join("\n\n")' "$GITHUB_EVENT_PATH" > issue.txt
+          entire_repo="gh/$GITHUB_REPOSITORY"
+          if [ -z "$ENTIRE_TOKEN" ]; then
+            echo 'ENTIRE_TOKEN is required; register and index this repository with Entire first' >&2
+            exit 1
+          fi
+          go install github.com/entireio/cli/cmd/entire@v0.11.4 > /dev/null 2>&1 || {
+            echo 'Entire CLI installation failed before any model call' >&2
+            exit 1
+          }
+          export PATH="$GOBIN:$PATH"
+          python - "$entire_repo" <<'PY'
+          import sys
+          from prism.entire import ensure_ready
+          ensure_ready(sys.argv[1])
+          PY
+          commit="${{ steps.source.outputs.commit }}"
+          go install "github.com/Bhavya031/Glance/cmd/glance@$GLANCE_COMMIT" > /dev/null 2>&1 || {
+            echo 'Glance install failed; check GLANCE_READ_TOKEN access and the pinned commit' >&2
+            exit 1
+          }
+          python -c 'import os; from prism import glance; glance.measure("count check", glance=os.environ["PRISM_GLANCE"])' > /dev/null
+          status=0
+          prism predict "$issue_url" --repo "$entire_repo" --event "$GITHUB_EVENT_PATH" \
+            --commit "$commit" --checkout source \
+            --provider claude --format json --max-cost-usd 0.10 --max-output-tokens 4000 \
+            --max-extra-rounds 1 --timeout-seconds 180 > predict.json 2> predict.err || status=$?
+          if [ "$status" -eq 0 ]; then
+            prism solve-estimate --issue-file issue.txt --prediction predict.json --provider claude \
+              --commit "$commit" --checkout source --worker-model "$WORKER_MODEL" --mode heuristic \
+              > estimate.json 2> estimate.err || status=$?
+          fi
+          prism issue-comment --prediction predict.json --estimate estimate.json \
+            --event "$GITHUB_EVENT_PATH" --commit "$commit" \
+            --errors predict.err estimate.err --run-url "$RUN_URL" > comment.md || status=$?
+          exit "$status"
+      - name: Post or update the one Prism comment
+        if: always() && (failure() || steps.reserve.outcome == 'success')
+        run: |
+          if [ "${{ steps.reserve.outcome }}" != 'success' ]; then
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body "Prism stopped before it could reserve this issue. See the [workflow run]($RUN_URL)."
+            exit 0
+          fi
+          if [ ! -s comment.md ] || grep -q '<!-- prism-loading -->' comment.md; then
+            printf '%s\n' '<!-- prism-estimate -->' '### Prism estimate did not finish' '' \
+              "**Stopped by:** setup failed before prediction. See the [workflow run]($RUN_URL)." > comment.md
+          fi
+          id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" --jq \
+            '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- prism-estimate -->"))) | .id' | tail -n 1)
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@comment.md > /dev/null
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" -F body=@comment.md > /dev/null
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.gate.outcome == 'success'
+        with:
+          name: prism-estimate-${{ github.event.issue.number }}
+          path: |
+            predict.json
+            estimate.json
+            comment.md
+          if-no-files-found: ignore

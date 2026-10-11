@@ -119,6 +119,25 @@ class ContextTests(unittest.TestCase):
             github_context.build_context("https://github.com/o/r/issues/1", entire_repo="gh/fork/repo",
                                          pr_url="https://github.com/o/r/pull/42", pre_merge_sha="c" * 40)
 
+    def test_normal_issue_uses_pinned_tree_and_its_own_entire_mapping(self):
+        commit = "a" * 40
+        event_issue = {"title": "opened title", "body": "$(echo data)", "number": 1}
+        values = {
+            "repos/o/r": {"default_branch": "main"},
+            "repos/o/r/commits/main": {"sha": "b" * 40},
+            "repos/o/r/issues/1/comments?per_page=100&page=1": [],
+            f"repos/o/r/git/trees/{commit}?recursive=1": {"tree": [{"path": "src/a.py", "type": "blob"}]},
+        }
+        with mock.patch.object(github_context, "api_v2", side_effect=lambda path: values[path]):
+            ctx = github_context.build_context("https://github.com/o/r/issues/1", entire_repo="gh/o/r",
+                                               commit=commit, search_checkout=Path("source"),
+                                               issue_override=event_issue)
+        self.assertEqual(ctx.search_commit, commit)
+        self.assertEqual(ctx.known_paths, {"src/a.py"})
+        self.assertEqual(ctx.bundle.issue["title"], "opened title")
+        with self.assertRaisesRegex(ValueError, "must match"):
+            github_context.build_context("https://github.com/o/r/issues/1", entire_repo="gh/other/repo")
+
     def test_fetch_reference_rejects_unsafe_refs_and_honors_cutoff(self):
         ctx = Context(Bundle({}, [], [], {}), set(), {("o", "r", 7)}, "2020-01-02T00:00:00Z", 42, "gh/o/r")
 

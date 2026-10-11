@@ -20,6 +20,8 @@ def parser() -> argparse.ArgumentParser:
     predict.add_argument("--repo", required=True)
     predict.add_argument("--pr-url", help="target PR to exclude from a pre-merge benchmark prediction")
     predict.add_argument("--pre-merge-sha", help="pre-merge base commit; requires --pr-url")
+    predict.add_argument("--commit", help="immutable source commit for an issue prediction")
+    predict.add_argument("--event", type=Path, help="GitHub event JSON for the triggering issue title and body")
     predict.add_argument("--checkout", type=Path, help="git repository containing the pinned search commit")
     predict.add_argument("--provider", choices=("claude", "openai", "both"), default="both")
     predict.add_argument("--format", choices=("text", "json", "markdown"))
@@ -119,11 +121,14 @@ def parser() -> argparse.ArgumentParser:
     gate = commands.add_parser("issue-gate", help="issue bot: refuse an event that may not start a run; print "
                                                   "note=<try-again line> when the repository is rate limited")
     gate.add_argument("--event", type=Path, required=True, help="GitHub webhook event JSON (GITHUB_EVENT_PATH)")
+    gate.add_argument("--commit", help="resolved source commit for same-issue duplicate detection")
     comment = commands.add_parser("issue-comment", help="issue bot: the markdown comment for a finished or failed run")
     comment.add_argument("--prediction", type=Path, help="`prism predict --format json` output, if it got that far")
     comment.add_argument("--estimate", type=Path, help="`prism solve-estimate` output, if it got that far")
     comment.add_argument("--errors", type=Path, nargs="*", default=[], help="stderr of the steps, in run order")
     comment.add_argument("--run-url", help="link to the workflow run")
+    comment.add_argument("--event", type=Path, help="GitHub event JSON for successful-estimate duplicate metadata")
+    comment.add_argument("--commit", help="resolved source commit for successful-estimate duplicate metadata")
     return command_parser
 
 
@@ -326,7 +331,7 @@ def _issue(args) -> None:
 
     if args.command == "issue-gate":
         try:
-            note = bot.gate(_read_json(args.event), github_context.api_v2)
+            note = bot.gate(_read_json(args.event), github_context.api_v2, commit=args.commit)
         except PermissionError as error:
             raise SystemExit(f"prism issue-gate: not running: {error}") from None
         print(f"note={note or ''}")
@@ -339,7 +344,8 @@ def _issue(args) -> None:
         estimate = None
     prediction = _saved(args.prediction)
     errors = "\n".join(path.read_text(errors="replace") for path in args.errors if path.is_file())
-    print(bot.render(prediction if isinstance(prediction, dict) else None, estimate, errors, args.run_url), end="")
+    source = bot.source_marker(_read_json(args.event), args.commit) if estimate and args.event and args.commit else None
+    print(bot.render(prediction if isinstance(prediction, dict) else None, estimate, errors, args.run_url, source), end="")
     if estimate is None:
         raise SystemExit(1)
 
@@ -366,8 +372,21 @@ def main(argv=None) -> None:
             raise SystemExit("prism predict: --pre-merge-sha requires --pr-url")
         if args.pre_merge_sha and not args.checkout:
             raise SystemExit("prism predict: --pre-merge-sha requires --checkout for commit-scoped search")
-        if args.checkout and not args.pre_merge_sha:
-            raise SystemExit("prism predict: --checkout requires --pre-merge-sha")
+        if args.commit and (args.pr_url or args.pre_merge_sha):
+            raise SystemExit("prism predict: --commit cannot be combined with benchmark PR options")
+        if args.commit and not args.checkout:
+            raise SystemExit("prism predict: --commit requires --checkout for commit-scoped search")
+        if args.checkout and not (args.pre_merge_sha or args.commit):
+            raise SystemExit("prism predict: --checkout requires --commit or --pre-merge-sha")
+        issue_override = None
+        if args.event:
+            event = _read_json(args.event)
+            issue_override = event.get("issue") if isinstance(event, dict) else None
+            if (not isinstance(issue_override, dict) or
+                    not isinstance(issue_override.get("title"), str) or
+                    (event.get("repository") or {}).get("full_name") != args.repo.removeprefix("gh/") or
+                    issue_override.get("html_url") != args.issue_url or "pull_request" in issue_override):
+                raise SystemExit("prism predict: event issue does not match repository and issue URL")
         budget = {"max_cost_usd": args.max_cost_usd, "max_extra": args.max_extra_rounds,
                   "timeout_seconds": args.timeout_seconds}
         if args.max_output_tokens is not None:
@@ -389,6 +408,7 @@ def main(argv=None) -> None:
                 with tracing.step("collect-context", "TOOL"):
                     ctx = build_context(args.issue_url, entire_repo=args.repo,
                                         pr_url=args.pr_url, pre_merge_sha=args.pre_merge_sha,
+                                        commit=args.commit, issue_override=issue_override,
                                         search_checkout=args.checkout)
                 outcomes = asyncio.run(_predict(ctx, providers, budget))
             predictions, failed = [], {}

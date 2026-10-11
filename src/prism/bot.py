@@ -5,7 +5,9 @@ comment is built from Prism's own JSON, with every value from outside escaped.
 """
 
 from datetime import datetime, timedelta, timezone
+import hashlib
 from html import escape
+import json
 from urllib.parse import urlencode
 
 from . import results, solve
@@ -17,6 +19,15 @@ INSIDERS = ("OWNER", "MEMBER", "COLLABORATOR")
 BOT_LOGIN = "github-actions[bot]"
 # Marks the one comment the bot keeps up to date and the reservation before spending.
 MARKER = "<!-- prism-estimate -->"
+LOADING = "<!-- prism-loading -->"
+JOB_TIMEOUT_MINUTES = 15
+
+
+def source_marker(event: dict, commit: str) -> str:
+    issue = event["issue"]
+    issue_text = json.dumps([issue["title"], issue.get("body") or ""], ensure_ascii=False, separators=(",", ":"))
+    digest = hashlib.sha256(issue_text.encode()).hexdigest()
+    return f"<!-- prism-source:sha256={digest};commit={commit} -->"
 
 
 def refusal(event: dict) -> str | None:
@@ -25,8 +36,10 @@ def refusal(event: dict) -> str | None:
     if "pull_request" in issue:
         return "pull requests are not estimated"
     if comment is not None:
+        if (comment.get("user") or {}).get("type") == "Bot":
+            return "bot comments do not request estimates"
         body = str(comment.get("body") or "")
-        command = body.startswith(COMMAND) and (len(body) == len(COMMAND) or body[len(COMMAND)].isspace())
+        command = body == COMMAND
         if event.get("action") != "created" or not command:
             return f"not a new {COMMAND} comment"
         author = comment
@@ -56,11 +69,31 @@ def retry_after(comments: list[dict], now: datetime) -> datetime | None:
     return allowed if allowed > now else None
 
 
-def gate(event: dict, fetch, now: datetime | None = None) -> str | None:
-    """Raise PermissionError for an event that must not run; return a try-again note when rate limited, else None."""
+def gate(event: dict, fetch, now: datetime | None = None, *, commit: str | None = None) -> str | None:
+    """Refuse unauthorized, duplicate, or repository-rate-limited issue requests before model calls."""
     if reason := refusal(event):
         raise PermissionError(reason)
     now = now or datetime.now(timezone.utc)
+    if commit:
+        repo = event["repository"]["full_name"]
+        issue_number = event["issue"]["number"]
+        marker = source_marker(event, commit)
+        for page in range(1, 101):
+            comments = fetch(f"repos/{repo}/issues/{issue_number}/comments?per_page=100&page={page}")
+            for comment in comments:
+                if not is_ours(comment):
+                    continue
+                body = comment["body"]
+                link = comment.get("html_url") or f"https://github.com/{repo}/issues/{issue_number}#issuecomment-{comment['id']}"
+                updated = datetime.fromisoformat(comment["updated_at"].replace("Z", "+00:00"))
+                if LOADING in body and now - updated < timedelta(minutes=JOB_TIMEOUT_MINUTES):
+                    return f"Prism is already estimating this issue: {link}. No new model call was made."
+                if marker in body and "### Prism solve-cost estimate" in body:
+                    return f"Prism already estimated this issue text at this commit: {link}. No new model call was made."
+            if len(comments) < 100:
+                break
+        else:
+            raise RuntimeError("too many issue comments to verify duplicate estimates")
     for page in range(1, 101):
         comments = fetch(recent_comments_path(event["repository"]["full_name"], now, page))
         if allowed := retry_after(comments, now):
@@ -123,7 +156,7 @@ def _caps(prediction: dict | None) -> list[str]:
 
 
 def render(prediction: dict | None = None, estimate: dict | None = None, error: str | None = None,
-           run_url: str | None = None) -> str:
+           run_url: str | None = None, source: str | None = None) -> str:
     """The issue comment: the estimate table, or what stopped the run and what it had spent."""
     footer = [f"[Workflow run]({run_url})"] if run_url else []
     if estimate is None:
@@ -167,4 +200,4 @@ def render(prediction: dict | None = None, estimate: dict | None = None, error: 
     body = ["### Prism solve-cost estimate", "", "| | |", "|---|---|",
             *(f"| {name} | {value} |" for name, value in rows), "",
             "These are unvalidated guesses."]
-    return results.redact("\n".join([MARKER, *body, "", *footer])) + "\n"
+    return results.redact("\n".join([MARKER, *([source] if source else []), *body, "", *footer])) + "\n"

@@ -1,0 +1,29 @@
+# Install Prism estimates on GitHub issues
+
+1. Copy [the template](../examples/prism-estimate.yml) to `.github/workflows/prism-estimate.yml` in the repository where issues are opened. The template is stored outside Prisme's workflow directory so it does not run on Prisme issues. Copy it unchanged; it reads the repository and issue from the event. Set Actions workflow permissions to allow issue comments if repository settings override the YAML permissions.
+2. Set these Actions secrets in that repository:
+   - `ANTHROPIC_API_KEY`: required for the default Claude file prediction.
+   - `ENTIRE_TOKEN`: read access to this repository in Entire. The workflow checks that its `gh/owner/repo` entry is ready before making model calls.
+   - `PRISME_READ_TOKEN`: GitHub read access to the private `Bhavya031/Prisme` repository for installation.
+   - `GLANCE_READ_TOKEN`: GitHub read access to the private `Bhavya031/Glance` repository for installation. One token may serve both private repositories if it has access to both.
+
+   The built-in `GITHUB_TOKEN` reads this repository and updates issue comments; it needs the workflow's `contents: read` and `issues: write` permissions. No extra token is needed for those same-repository operations.
+3. Set up this exact GitHub repository in Entire as described below and wait until `/gh/owner/repo` reports **ready**. An unregistered or unfinished index causes a setup failure before any model call. The workflow searches the pinned Git checkout, so a replay does not use hits from a newer Entire index.
+4. Open an issue as an owner, member, or collaborator. To request a later estimate, post a comment containing exactly `/prism estimate`. Other comments, bot comments, pull request comments, and unauthorized authors do not start a run. A separate job immediately adds 👀 to the issue or command comment using the built-in token's `issues: write` permission. The estimate job serializes requests and keeps a repository-wide ten-minute cooldown. It posts a marked ⏳ Estimating comment with the UTC start time and workflow link, then updates that same comment with the estimate or failure. A recent loading comment or a completed estimate for the same issue text and source commit causes a short, unmarked duplicate reply instead of a paid run. Edits to the issue or a changed source commit allow a new estimate after cooldown. Cooldown and duplicate replies do not reset the cooldown or overwrite an estimate.
+5. For a historical replay, set the repository Actions variable `PRISM_REPLAY_REF` to a maintainer-chosen branch, tag, or commit. The workflow resolves it to a full commit at run start and uses that commit for search, checkout, file reading, token measurement, and the reported estimate. Remove the variable to use the repository default branch. Issue text cannot select the replay ref. Replaying old code with today's issue text or references can still differ from a historical issue snapshot.
+
+The workflow pins Prism and Glance by commit. `PRISM_COMMIT` is `68901f8dfe438feb4a24aff81183958d18b114c6`, the pushed commit containing the duplicate gate logic. `GLANCE_COMMIT` is pinned to `3465201a46801c96fe57958306e36eb3b3132679`, because no Glance release tag was found in the inspected remote refs.
+
+Each successful run saves `predict.json`, `estimate.json`, and the comment as a workflow artifact. A setup or estimate failure appears in the workflow run and in the issue comment when comment posting is available. No solve worker is launched; the estimate is a heuristic built from file prediction and Glance token counting.
+
+GitHub can replace a pending estimate job with a newer pending request; the separate reaction job still acknowledges each eligible trigger. GitHub may also stop an estimate job on cancellation or timeout before its `always()` comment update runs. If that happens, a loading comment can remain; the gate treats it as in progress for 15 minutes, matching the job timeout, then permits another request subject to the repository cooldown.
+
+## Entire setup and current credential limit
+
+Entire setup is the installer's responsibility. With an authenticated Entire CLI, check that the GitHub repository appears in `entire repo mirror list --available --name owner/repo`. If it is available, run `entire repo mirror add /gh/owner/repo` (choose a cluster or region with `--cluster` when needed), then `entire repo view /gh/owner/repo --json` until its status is ready. If it is absent from the available list, grant that GitHub repository to the Entire integration/account first; the CLI cannot mirror a repository it cannot see. Verify the region and account used for the mirror before installing the workflow.
+
+The workflow installs the Entire CLI pinned at v0.11.4 and uses Prism's default CLI transport. The previous HTTP transport was observed to return 403 at its hardcoded repository-list endpoint even for a known indexed repository. The CLI route had worked in an earlier runner. This change has not been run on a new runner.
+
+The Entire region comes from the `ENTIRE_TOKEN` JWT audience. To use another region, log in to Entire in that region and create the token there. There is no workflow setting to change the region.
+
+On 2026-10-11, the bearer observed for `ENTIRE_TOKEN` was an eight-hour JWT (issued 02:50:04 UTC, expiring 10:50:04 UTC). The inspected CLI help exposed no API-key or service-token issuance command. Refresh the Actions secret before it expires until Entire provides a supported long-lived CI credential. This is an observation of that credential on that date, not a general token lifetime guarantee.
