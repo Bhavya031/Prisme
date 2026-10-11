@@ -362,9 +362,9 @@ def estimate(*, issue_text: str, files: dict, commit: str, worker_model: str, pe
             "measurement": {
                 "label": "measured selected-context tokens: a count of the selected starting context, not a prediction "
                          "of total solve tokens",
-                "tool": "glance estimate --json <directory holding the one bundle file>", **measurement,
-                "includes": "issue text, each included file's path, separators and full contents at repository_commit, "
-                            "plus Glance's fixed frame (see glance_wrapper)",
+                "tool": "glance count --json --encoding <encoding> - (bundle on stdin)", **measurement,
+                "includes": "issue text and each included file's path, separators and full contents at repository_commit: "
+                            "exactly the bytes hashed in input_sha256, with nothing added by Glance",
                 "note": "Counted with the named encoding; the worker model's own tokenizer can count differently.",
                 **(sources or {}),
             },

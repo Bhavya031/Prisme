@@ -42,7 +42,8 @@ PREDICTION = {
 
 def fake_measure(text):
     """Stands in for Glance: one token per four characters."""
-    return {"context_tokens": max(1, len(text) // 4), "encoding": "fake"}
+    return {"context_tokens": max(1, len(text) // 4), "encoding": "fake", "glance_version": "fake-1",
+            "input_sha256": hashlib.sha256(text.encode()).hexdigest()}
 
 
 def build(mode="heuristic", **options):
@@ -298,48 +299,67 @@ class GlanceTests(unittest.TestCase):
         text = glance.assemble("  The issue  ", {"a.py": "A = 1\n", "b/c.py": "C = 2\n"})
         self.assertEqual(text, "Issue:\nThe issue\n\nFile: a.py\n---\nA = 1\n\n---\n\nFile: b/c.py\n---\nC = 2\n\n---\n\n")
 
-    def run_measure(self, payload, returncode=0, text="context"):
+    def counted(self, text="context", **changes):
+        data = text.encode()
+        return {"schema_version": "1", "glance_version": "v9.9.9", "encoding": "o200k_base", "context_tokens": 4321,
+                "input_bytes": len(data), "input_sha256": hashlib.sha256(data).hexdigest()} | changes
+
+    def run_measure(self, payload, returncode=0, text="context", stderr=b"boom"):
         seen = {}
 
         def run(command, **options):
-            folder = Path(command[-1])
-            seen.update(command=command, bundle=(folder / glance.BUNDLE).read_text(), files=sorted(os.listdir(folder)),
-                        config=json.loads(Path(command[command.index("--config") + 1]).read_text()), env=options["env"])
-            return SimpleNamespace(returncode=returncode, stdout=json.dumps(payload), stderr="boom")
+            seen.update(command=command, **options)
+            stdout = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+            return SimpleNamespace(returncode=returncode, stdout=b"" if returncode else stdout, stderr=stderr)
 
         return glance.measure(text, glance="/bin/glance", run=run), seen
 
-    def test_measure_gives_glance_exactly_the_bundle_and_reads_its_count(self):
-        big = "x" * (3 << 20)
-        payload = {"schema_version": "2", "encoding": "o200k_base", "context_tokens": 4321, "scanned_files": 1,
-                   "scanned_bytes": len(big), "selected_files": [{"path": glance.BUNDLE, "score": 0}], "excluded_files": [],
-                   "truncated": False, "estimated_input_tokens": {"low": 1, "central": 2, "high": 3}}
-        measured, seen = self.run_measure(payload, text=big)
-        self.assertEqual((measured["context_tokens"], measured["encoding"], measured["bundle_bytes"]), (4321, "o200k_base", 3 << 20))
-        self.assertEqual(measured["bundle_sha256"], hashlib.sha256(big.encode()).hexdigest())
-        self.assertEqual((seen["bundle"], seen["files"]), (big, [glance.BUNDLE]))
-        self.assertEqual(seen["command"][:5], ["/bin/glance", "estimate", "--json", "--encoding", "o200k_base"])
-        # No issue or repo is passed, so Glance has nothing to fetch; its limits are raised to fit the one bundle.
-        self.assertFalse({"--issue", "--repo"} & set(seen["command"]))
-        self.assertGreater(seen["config"]["max_file_bytes"], 3 << 20)
-        self.assertIn("GLANCE_RECORDS", seen["env"])
+    def test_measure_pipes_exactly_the_bundle_to_glance_count_and_records_its_provenance(self):
+        text = "Issue:\nna\u00efve \U0001f44d\r\n\nFile: a.py\n---\nA = 1\n\n---\n\n"
+        measured, seen = self.run_measure(self.counted(text), text=text)
+        self.assertEqual(seen["command"], ["/bin/glance", "count", "--json", "--encoding", "o200k_base", "-"])
+        # The exact UTF-8 bytes go to stdin: no file, no directory, no config, nothing for Glance to select from.
+        self.assertEqual(seen["input"], text.encode())
+        self.assertEqual(measured, {"context_tokens": 4321, "encoding": "o200k_base", "glance_schema_version": "1",
+                                    "glance_version": "v9.9.9", "input_bytes": len(text.encode()),
+                                    "input_sha256": hashlib.sha256(text.encode()).hexdigest()})
+        self.assertNotIn("env", seen)
 
-    def test_measure_refuses_anything_but_a_full_count_of_the_bundle(self):
-        good = {"context_tokens": 5, "selected_files": [{"path": glance.BUNDLE}], "excluded_files": [], "truncated": False,
-                "scanned_files": 1, "scanned_bytes": len("context"), "encoding": "o200k_base"}
-        self.assertEqual(self.run_measure(good)[0]["context_tokens"], 5)
-        # Fewer bytes scanned than sent, a second file, or another encoding: not a count of the whole bundle.
-        for payload in (good | {"selected_files": []}, good | {"selected_files": [{"path": "other.py"}]},
-                        good | {"scanned_bytes": 3}, good | {"scanned_files": 2}, good | {"encoding": "cl100k_base"},
-                        good | {"context_tokens": True},
-                        good | {"excluded_files": [{"path": glance.BUNDLE, "reason": "exceeds max_file_bytes"}]},
-                        good | {"truncated": True}, good | {"context_tokens": 0}, {"unexpected": True}):
-            with self.assertRaises(glance.GlanceError):
+    def test_measure_rejects_a_count_of_anything_but_the_bytes_it_sent(self):
+        for changes, message in (({"schema_version": "2"}, "schema '2' is not the supported schema '1'"),
+                                 ({"encoding": "cl100k_base"}, "used encoding 'cl100k_base'"),
+                                 ({"input_bytes": 6}, "measured different input than Prism sent: 6 bytes"),
+                                 ({"input_sha256": "0" * 64}, "measured different input than Prism sent"),
+                                 ({"context_tokens": True}, "invalid token count"), ({"context_tokens": -1}, "invalid token count"),
+                                 ({"context_tokens": "12"}, "invalid token count")):
+            with self.assertRaisesRegex(glance.GlanceError, message):
+                self.run_measure(self.counted(**changes))
+        incomplete = self.counted()
+        del incomplete["input_sha256"]
+        # `glance estimate` output, a missing field, and non-JSON are all refused rather than read as a count.
+        for payload in (incomplete, {"schema_version": "2", "context_tokens": 5, "selected_files": []}, b"recorded", b"[1]"):
+            with self.assertRaisesRegex(glance.GlanceError, "output Prism cannot read"):
                 self.run_measure(payload)
-        with self.assertRaisesRegex(glance.GlanceError, "Glance failed: boom"):
-            self.run_measure(good, returncode=1)
+
+    def test_measure_has_no_fallback_when_count_is_missing_or_fails(self):
+        calls = []
+
+        def old_glance(command, **_):
+            calls.append(command[1])
+            return SimpleNamespace(returncode=1, stdout=b"", stderr=b'glance: unknown command "count"\n')
+
+        with self.assertRaisesRegex(glance.GlanceError, "has no `count` command. Upgrade Glance.*does not fall back"):
+            glance.measure("context", glance="/bin/glance", run=old_glance)
+        self.assertEqual(calls, ["count"])
+        with self.assertRaisesRegex(glance.GlanceError, "glance count failed: glance: input must be UTF-8 text"):
+            self.run_measure(self.counted(), returncode=1, stderr=b"glance: input must be UTF-8 text")
+        never = mock.Mock(side_effect=AssertionError("glance must not be called"))
+        with self.assertRaisesRegex(glance.GlanceError, "over the 8388608-byte limit.*does not truncate"):
+            glance.measure("x" * ((8 << 20) + 1), glance="/bin/glance", run=never)
+        with self.assertRaisesRegex(ValueError, "not valid UTF-8"):
+            glance.measure("lone surrogate \ud83d", glance="/bin/glance", run=never)
         with self.assertRaisesRegex(ValueError, "only these encodings"):
-            glance.measure("x", glance="/bin/glance", encoding="claude")
+            glance.measure("x", glance="/bin/glance", encoding="claude", run=never)
 
     def test_files_are_read_at_the_recorded_commit_not_the_working_tree(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -394,32 +414,34 @@ class GlanceTests(unittest.TestCase):
 @unittest.skipUnless(os.environ.get("PRISM_GLANCE_LIVE") and os.environ.get(glance.ENV),
                      "set PRISM_GLANCE_LIVE=1 and PRISM_GLANCE to check the real Glance binary")
 class RealGlanceBundleTests(unittest.TestCase):
-    """Opt-in: does the real Glance count the whole multi-file bundle, with only its fixed frame added?"""
+    """Opt-in: does the real `glance count` count exactly the multi-file bundle, nothing selected, cut or added?"""
 
     def count(self, text):
         return glance.measure(text, glance=os.environ[glance.ENV])["context_tokens"]
 
-    def test_multi_file_bundle_is_counted_whole(self):
+    def test_multi_file_bundle_is_counted_whole_with_nothing_added(self):
         files = {f"pkg/module_{index}.py": "".join(
             f"def function_{index}_{line}(value):\n    return value * {line} + {index}  # row {line}\n" for line in range(400))
             for index in range(3)}
-        whole = glance.assemble("Crash on empty input\n\nSteps: call parse('') and read the traceback.", files)
-        frame = glance.wrapper(glance=os.environ[glance.ENV])["tokens_for_empty_bundle"]
+        whole = glance.assemble("Crash on empty input\r\n\nSteps: call parse('') and read the na\u00efve traceback.", files)
+        measured = glance.measure(whole, glance=os.environ[glance.ENV])
+        self.assertEqual((measured["input_bytes"], measured["input_sha256"], measured["glance_schema_version"]),
+                         (len(whole.encode()), hashlib.sha256(whole.encode()).hexdigest(), "1"))
+        self.assertTrue(measured["glance_version"])
         cut = whole.index("File: pkg/module_2.py")
-        total, first, second = self.count(whole), self.count(whole[:cut]), self.count(whole[cut:])
-        # Counting the parts apart and together agrees up to a token or two at the join: nothing was dropped or added.
-        self.assertLessEqual(abs(total - (first + second - frame)), 3)
+        total, first, second = measured["context_tokens"], self.count(whole[:cut]), self.count(whole[cut:])
+        # Parts and whole agree up to a token or two at the join, with no frame to subtract: nothing dropped or added.
+        self.assertLessEqual(abs(total - (first + second)), 3)
         self.assertGreater(first, second)
-        # Text at the very end is counted, so the bundle is not cut short.
+        # Text at the very end is counted, and empty input counts as zero tokens.
         self.assertGreater(self.count(whole + "zebra quokka wombat axolotl\n"), total)
-        self.assertLess(frame, 20)
+        self.assertEqual(self.count(""), 0)
 
-    def test_bundle_larger_than_glances_default_file_limit_is_not_truncated(self):
+    def test_a_bundle_of_several_megabytes_is_not_truncated(self):
         block = "".join(f"value_{line} = compute(line={line}, scale={line % 7})\n" for line in range(30_000))
         self.assertGreater(len(block.encode()), 1 << 20)
-        frame = glance.wrapper(glance=os.environ[glance.ENV])["tokens_for_empty_bundle"]
         once, twice = self.count(block), self.count(block + block)
-        self.assertLessEqual(abs(twice - (2 * once - frame)), 3)
+        self.assertLessEqual(abs(twice - 2 * once), 3)
 
 
 class ValidationTests(unittest.TestCase):
@@ -464,6 +486,11 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual((record["comparison"][name]["position"], record["comparison"][name]["actual_over_central"]),
                              ("within", 1.0))
         self.assertIn("not a billed amount", record["actual_cost"]["basis"])
+        # The run record carries where the context count came from.
+        measurement = self.saved["estimate"]["assumptions"]["measurement"]
+        self.assertEqual({key: record["context_measurement"][key] for key in ("glance_version", "input_sha256", "encoding")},
+                         {"glance_version": "fake-1", "input_sha256": measurement["input_sha256"], "encoding": "fake"})
+        self.assertEqual(record["context_measurement"]["measured_context_tokens"], self.saved["estimate"]["measured_context_tokens"])
         over = self.record(uncached_input=self.tokens["high"]["input"] + 1, billed_usd=12.5)
         self.assertEqual((over["comparison"]["input_tokens"]["position"], over["comparison"]["input_tokens"]["within_range"]),
                          ("above_high", False))
@@ -614,7 +641,6 @@ class LeakTests(unittest.TestCase):
             with mock.patch.object(cli, "_load_env"), mock.patch.object(glance, "locate", return_value="/bin/glance"), \
                  mock.patch.object(glance, "measure", measure), contextlib.redirect_stdout(stdout), \
                  contextlib.redirect_stderr(io.StringIO()), \
-                 mock.patch.object(glance, "wrapper", return_value={"tokens_for_empty_bundle": 10}), \
                  mock.patch.object(glance, "read_files", return_value=(dict(BASE_FILES), [])) as read:
                 cli.main([*arguments, "--files", "src/a.py", "--save", str(saved)])
                 with self.assertRaisesRegex(SystemExit, "LeakError.*exist only in the gold or test patch"):
@@ -653,7 +679,6 @@ class CliTests(unittest.TestCase):
                     "--commit", COMMIT, "--github-repo", "o/r", "--worker-model", "worker-x", "--pricing", folder / "pricing.json"]
             with mock.patch.object(glance, "locate", return_value="/bin/glance"), \
                  mock.patch.object(glance, "measure", lambda text, **_: fake_measure(text)), \
-                 mock.patch.object(glance, "wrapper", return_value={"tokens_for_empty_bundle": 10}), \
                  mock.patch.object(glance, "read_files", return_value=(
                      {"src/a.py": "a = 1\n"}, [{"path": "tests/test_a.py", "reason": "missing at the recorded commit"}])) as read:
                 stdout, stderr, code = self.run_cli(*base, "--save", folder / "pre.json", "--task-id", "task-9")
@@ -670,7 +695,8 @@ class CliTests(unittest.TestCase):
             self.assertEqual((measurement["included_paths"], measurement["excluded_paths"], measurement["encoding"]),
                              (["src/a.py"], [{"path": "tests/test_a.py", "reason": "missing at the recorded commit"}], "fake"))
             self.assertIn("measured selected-context tokens", measurement["label"])
-            self.assertEqual(measurement["glance_wrapper"], {"tokens_for_empty_bundle": 10})
+            self.assertNotIn("glance_wrapper", measurement)
+            self.assertIn("glance count", measurement["tool"])
 
             started = "2099-01-01T00:00:00Z"
             usage = ["--worker-model", "worker-x", "--uncached-input", 5000, "--output", 300, "--started-at", started]

@@ -1,8 +1,10 @@
 """Measure a solve's starting context with Glance, from file contents at one recorded commit.
 
-Glance's `estimate` takes neither a file list nor a commit: it picks files itself by scoring them against a
-GitHub issue it fetches, and with no issue it keeps only the first file. So Prism reads its own predicted files
-at the commit, writes issue text, paths, separators and contents into one bundle, and has Glance tokenize that.
+Prism owns file selection and context assembly; Glance owns token counting. Prism reads its predicted files at
+the commit, writes issue text, paths, separators and contents into one bundle, and pipes exactly those bytes to
+`glance count --json --encoding <name> -`. Glance adds nothing, reads no repository or config and uses no network.
+Prism accepts the count only when the byte length and SHA-256 Glance reports match its own bundle. There is no
+fallback to `glance estimate`, byte counts or file names.
 """
 
 import base64
@@ -12,7 +14,6 @@ import os
 import re
 import shutil
 import subprocess
-import tempfile
 import urllib.error
 import urllib.parse
 from pathlib import Path
@@ -20,16 +21,15 @@ from pathlib import Path
 from . import github_context
 
 ENV = "PRISM_GLANCE"
-BUNDLE = "prism-context.txt"
 ENCODINGS = ("o200k_base", "cl100k_base")
+COUNT_SCHEMA = "1"
+# `glance count` refuses larger input.
+MAX_BUNDLE_BYTES = 8 << 20
 _SHA = re.compile(r"[0-9a-f]{40}")
-# Glance's own scan limits; the bundle is one file, so both are raised to fit it.
-_GLANCE_MAX_FILE_BYTES = 1 << 20
-_GLANCE_MAX_BYTES = 32 << 20
 
 
 class GlanceError(RuntimeError):
-    """Glance is missing, failed, or did not measure exactly the bundle Prism gave it."""
+    """Glance is missing, has no usable `count` command, or did not count exactly the bytes Prism sent."""
 
 
 def locate(explicit: str | None = None) -> str:
@@ -121,56 +121,44 @@ def assemble(issue_text: str, files: dict[str, str]) -> str:
 
 
 def measure(text: str, *, glance: str, encoding: str = "o200k_base", run=subprocess.run) -> dict:
-    """Token count of `text` as Glance tokenizes it; raises unless Glance counted exactly this bundle."""
+    """Token count of exactly `text` from `glance count`; raises unless Glance counted these very bytes."""
     if encoding not in ENCODINGS:
         raise ValueError(f"Glance supports only these encodings: {', '.join(ENCODINGS)}")
-    size = len(text.encode())
-    with tempfile.TemporaryDirectory(prefix="prism-glance-") as folder:
-        bundle_dir = Path(folder, "context")
-        bundle_dir.mkdir()
-        (bundle_dir / BUNDLE).write_text(text)
-        config = Path(folder, "glance.json")
-        config.write_text(json.dumps({"max_file_bytes": max(_GLANCE_MAX_FILE_BYTES, size + 1),
-                                      "max_bytes": max(_GLANCE_MAX_BYTES, 2 * size + 4096)}))
-        command = [glance, "estimate", "--json", "--encoding", encoding, "--config", str(config), str(bundle_dir)]
-        try:
-            # Glance's own config and records stay untouched; no issue or repo is named, so it makes no network call.
-            result = run(command, capture_output=True, text=True, timeout=300,
-                         env={**os.environ, "GLANCE_CONFIG": str(config), "GLANCE_RECORDS": str(Path(folder, "records.jsonl"))})
-        except FileNotFoundError:
-            raise GlanceError(f"Glance binary not found: {glance}") from None
-        except subprocess.TimeoutExpired:
-            raise GlanceError("Glance timed out measuring the context") from None
-    if result.returncode:
-        raise GlanceError(f"Glance failed: {(result.stderr or result.stdout).strip()[:500]}")
     try:
-        data = json.loads(result.stdout)
-        selected = [item["path"] for item in data["selected_files"]]
-        tokens = data["context_tokens"]
-    except (json.JSONDecodeError, KeyError, TypeError):
-        raise GlanceError("Glance returned output Prism cannot read; expected `glance estimate --json` schema 2") from None
-    # Glance must have read every byte of the one bundle and nothing else, or the count is not of what Prism sent.
-    if (selected != [BUNDLE] or data.get("excluded_files") or data.get("truncated") or data.get("scanned_files") != 1
-            or data.get("scanned_bytes") != size or data.get("encoding") != encoding
-            or isinstance(tokens, bool) or not isinstance(tokens, int) or tokens <= 0):
-        raise GlanceError(f"Glance did not measure the whole context bundle (selected {selected}, "
-                          f"excluded {data.get('excluded_files')}, truncated {data.get('truncated')}, scanned "
-                          f"{data.get('scanned_files')} file(s) and {data.get('scanned_bytes')} of {size} bytes, "
-                          f"encoding {data.get('encoding')})")
-    return {
-        "context_tokens": tokens,
-        "encoding": encoding,
-        "glance_schema_version": data.get("schema_version"),
-        "bundle_bytes": size,
-        "bundle_sha256": hashlib.sha256(text.encode()).hexdigest(),
-        # Glance's standard-profile whole-run range, kept for reference only; Prism's estimate does not use it.
-        "glance_profile_range_not_used": {"input_tokens": data.get("estimated_input_tokens"),
-                                          "output_tokens": data.get("estimated_output_tokens")},
-    }
-
-
-def wrapper(*, glance: str, encoding: str = "o200k_base", run=subprocess.run) -> dict:
-    """What `glance estimate` puts around the bundle, sized by measuring an empty bundle."""
-    return {"text_before": f"Instructions:\n\n\nFile: {BUNDLE}\n---\n", "text_after": "\n---\n\n",
-            "tokens_for_empty_bundle": measure("", glance=glance, encoding=encoding, run=run)["context_tokens"],
-            "note": "Glance adds this fixed frame to every count; it is included in the measured tokens, not subtracted."}
+        data = text.encode()
+    except UnicodeEncodeError:
+        raise ValueError("The issue text is not valid UTF-8 and cannot be counted") from None
+    if len(data) > MAX_BUNDLE_BYTES:
+        raise GlanceError(f"The context bundle is {len(data)} bytes, over the {MAX_BUNDLE_BYTES}-byte limit of "
+                          "`glance count`. Select fewer files; Prism does not truncate the measured context.")
+    digest = hashlib.sha256(data).hexdigest()
+    try:
+        result = run([glance, "count", "--json", "--encoding", encoding, "-"], input=data, capture_output=True, timeout=300)
+    except FileNotFoundError:
+        raise GlanceError(f"Glance binary not found: {glance}") from None
+    except subprocess.TimeoutExpired:
+        raise GlanceError("glance count timed out measuring the context") from None
+    if result.returncode:
+        detail = (result.stderr or result.stdout or b"").decode(errors="replace").strip()[:500]
+        if "unknown command" in detail:
+            raise GlanceError(f"This Glance ({glance}) has no `count` command. Upgrade Glance "
+                              "(go install github.com/Bhavya031/Glance/cmd/glance@latest); Prism does not fall back to "
+                              "`glance estimate`, byte counts or file names.")
+        raise GlanceError(f"glance count failed: {detail or 'no output'}")
+    try:
+        found = json.loads(result.stdout)
+        schema, version, used, tokens, size, reported = (found[key] for key in (
+            "schema_version", "glance_version", "encoding", "context_tokens", "input_bytes", "input_sha256"))
+    except (ValueError, KeyError, TypeError):
+        raise GlanceError(f"glance count returned output Prism cannot read; expected schema {COUNT_SCHEMA} JSON") from None
+    if schema != COUNT_SCHEMA:
+        raise GlanceError(f"glance count schema {schema!r} is not the supported schema {COUNT_SCHEMA!r}")
+    if used != encoding:
+        raise GlanceError(f"glance count used encoding {used!r}, not the requested {encoding!r}")
+    if size != len(data) or reported != digest:
+        raise GlanceError(f"glance count measured different input than Prism sent: {size} bytes, sha256 {reported}; "
+                          f"expected {len(data)} bytes, sha256 {digest}")
+    if isinstance(tokens, bool) or not isinstance(tokens, int) or tokens < 0:
+        raise GlanceError(f"glance count returned an invalid token count: {tokens!r}")
+    return {"context_tokens": tokens, "encoding": encoding, "glance_schema_version": schema, "glance_version": version,
+            "input_bytes": len(data), "input_sha256": digest}

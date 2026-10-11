@@ -254,7 +254,6 @@ def _solve_estimate(args) -> dict:
                  "max_output_tokens": args.planner_max_output_tokens, "max_cost_usd": args.planner_max_cost_usd},
         sources={"issue_source": issue_source, "file_selection": selection, "included_paths": list(files),
                  "excluded_paths": excluded,
-                 "glance_wrapper": glance.wrapper(glance=binary, encoding=args.encoding),
                  "content_source": f"git objects in {args.checkout}" if args.checkout else f"GitHub API, {github_repo}"})
     if instance is not None:
         estimate["assumptions"]["leak_check"] = swebench.leak_check(
