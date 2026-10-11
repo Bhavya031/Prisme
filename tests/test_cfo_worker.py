@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+from unittest import mock
 
 from prism import cfo_worker, models
 from prism.types import Usage
@@ -33,6 +34,9 @@ class CFOBudgetedWorkerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "prices differ"):
             self.worker(estimate=ESTIMATE | {"assumptions": {"pricing": {"usd_per_million_tokens": {
                 "uncached_input": 1.0, "cached_input": 0.1, "output": 10.0}}}})
+        with mock.patch.dict("os.environ", {"PRISM_CLAUDE_MODEL": "other"}):
+            with self.assertRaisesRegex(ValueError, "Configured provider model"):
+                self.worker()
 
     def test_reserves_full_call_cost_then_records_provider_usage(self):
         worker = self.worker()
@@ -46,13 +50,13 @@ class CFOBudgetedWorkerTests(unittest.TestCase):
                                          max_output_tokens=1, call=fake))
         self.assertEqual(result, {"ok": True})
         self.assertEqual(seen, [("claude", 1)])
-        self.assertEqual(worker.result()["spent_usd"], 0.00002)
+        self.assertEqual(worker.result()["spent_usd"], "0.00002")
         with self.assertRaises(cfo_worker.BudgetStop):
             asyncio.run(worker.call("code", "prompt", {}, max_input_tokens=5,
                                     max_output_tokens=400, call=fake))
         self.assertEqual(seen, [("claude", 1)])
         self.assertEqual(worker.result()["status"], "capped")
-        self.assertEqual(worker.result()["usd_cap"], 0.004)
+        self.assertEqual(worker.result()["usd_cap"], "0.004")
         self.assertEqual(worker.result()["actual_tokens"]["output"], 1)
 
     def test_billed_failure_keeps_reported_usage_in_final_output(self):
@@ -66,7 +70,7 @@ class CFOBudgetedWorkerTests(unittest.TestCase):
             asyncio.run(worker.call("code", "prompt", {}, max_input_tokens=5,
                                     max_output_tokens=1, call=fake))
         self.assertEqual((worker.result()["status"], worker.result()["spent_usd"],
-                          worker.result()["model_calls"]), ("failed", 0.000014, 1))
+                          worker.result()["model_calls"]), ("failed", "0.000014", 1))
 
     def test_provider_usage_over_declared_limit_stops_run(self):
         worker = self.worker()
@@ -82,7 +86,12 @@ class CFOBudgetedWorkerTests(unittest.TestCase):
     def test_completed_output_records_spend_against_cap(self):
         worker = self.worker()
         self.assertEqual((worker.finish()["status"], worker.result()["spent_usd"],
-                          worker.result()["remaining_usd"]), ("completed", 0, 0.004))
+                          worker.result()["remaining_usd"]), ("completed", "0", "0.004"))
+
+    def test_cached_usage_is_priced_exactly(self):
+        worker = self.worker()
+        worker._add_usage(Usage(input=2, cached_input=3, cache_write=1, output=1, reasoning=None))
+        self.assertEqual(worker.result()["spent_usd"], "0.0000168")
 
 
 if __name__ == "__main__":

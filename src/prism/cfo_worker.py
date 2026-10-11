@@ -29,9 +29,11 @@ class BudgetedWorker:
         if len(matches) != 1:
             raise ValueError(f"No worker usage price for {worker_model!r}")
         self.provider = matches[0]
+        if models._model(self.provider) != worker_model:
+            raise ValueError("Configured provider model differs from the allocated worker model")
         self.prices = models.PRICES[self.provider]
         rates = estimate.get("assumptions", {}).get("pricing", {}).get("usd_per_million_tokens", {})
-        if any(rates.get(key) != self.prices[price] for key, price in
+        if any(rates.get(key) is None or Decimal(str(rates[key])) != Decimal(str(self.prices[price])) for key, price in
                (("uncached_input", "input"), ("cached_input", "cached_input"), ("output", "output"))):
             raise ValueError("Saved estimate prices differ from the worker usage prices")
         try:
@@ -52,9 +54,9 @@ class BudgetedWorker:
         uncached = usage.input if self.provider == "claude" else usage.input - usage.cached_input
         if min(uncached, usage.cached_input, usage.cache_write, usage.output) < 0:
             raise ValueError("Provider reported invalid token usage")
-        return (Decimal(uncached * p["input"] + usage.cached_input * p["cached_input"]
-                        + usage.cache_write * p["cache_write"] + usage.output * p["output"])
-                / p["per"])
+        return sum(Decimal(count) * Decimal(str(p[price])) for count, price in (
+            (uncached, "input"), (usage.cached_input, "cached_input"),
+            (usage.cache_write, "cache_write"), (usage.output, "output"))) / p["per"]
 
     async def call(self, stage: str, prompt: str, schema: dict, *, max_input_tokens: int,
                    max_output_tokens: int, system: str = models.SYSTEM, call=models.call):
@@ -67,8 +69,8 @@ class BudgetedWorker:
         # shortcut: UTF-8 bytes plus framing room bound input conservatively; verify against real provider usage before a paid run.
         max_input_tokens = max(max_input_tokens, len((system + prompt + json.dumps(schema)).encode()) + 1024)
         # Reserve the costliest input category and the full provider output limit before dispatch.
-        ceiling = (Decimal(max_input_tokens * max(p["input"], p["cache_write"]))
-                   + Decimal(max_output_tokens * p["output"])) / p["per"]
+        ceiling = (Decimal(max_input_tokens) * Decimal(str(max(p["input"], p["cache_write"])))
+                   + Decimal(max_output_tokens) * Decimal(str(p["output"]))) / p["per"]
         if self.spent + ceiling > self.cap:
             self.status = "capped"
             raise BudgetStop("Next model call could exceed the allocated USD cap")
@@ -105,8 +107,8 @@ class BudgetedWorker:
 
     def result(self) -> dict:
         return {"allocation_id": self.allocation_id, "status": self.status,
-                "usd_cap": float(self.cap), "spent_usd": float(self.spent),
-                "remaining_usd": float(self.cap - self.spent), "model_calls": self.calls,
+                "usd_cap": str(self.cap), "spent_usd": str(self.spent),
+                "remaining_usd": str(self.cap - self.spent), "model_calls": self.calls,
                 "actual_tokens": dict(self.tokens),
                 "cost_basis": "provider-reported token usage priced at Prism list prices; not a billed amount"}
 
