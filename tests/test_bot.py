@@ -88,6 +88,47 @@ class BotTests(unittest.TestCase):
         self.assertIn('gh issue comment "$ISSUE_NUMBER"', cooldown)
         self.assertNotIn(bot.MARKER, cooldown)
 
+    def test_duplicate_gate_compares_issue_text_and_resolved_commit(self):
+        request = event(repo="owner/repo", number=12)
+        commit = "a" * 40
+        url = "https://github.com/owner/repo/issues/12#issuecomment-9"
+        comment = {"id": 9, "html_url": url, "user": {"login": bot.BOT_LOGIN},
+                   "updated_at": "2026-10-11T03:50:00Z"}
+
+        def check(previous, current=request, sha=commit, at=NOW):
+            def fetch(path):
+                return [previous] if "/issues/12/comments?" in path else []
+            return bot.gate(current, fetch, at, commit=sha)
+
+        loading = comment | {"body": bot.MARKER + "\n" + bot.LOADING + "\n### ⏳ Estimating"}
+        self.assertIn(url, check(loading))
+        self.assertIn("already estimating", check(loading))
+        self.assertIsNone(check(loading, at=datetime(2026, 10, 11, 4, 6, tzinfo=timezone.utc)))
+        saved = json.loads((FIXTURES / "estimate-sympy-20590.json").read_text())["estimate"]
+        completed = comment | {"body": bot.render(estimate=saved, source=bot.source_marker(request, commit))}
+        self.assertIn(url, check(completed))
+        self.assertIn("already estimated", check(completed))
+        edited = json.loads(json.dumps(request))
+        edited["issue"]["body"] = "Edited body"
+        self.assertIsNone(check(completed, current=edited))
+        self.assertIsNone(check(completed, sha="b" * 40))
+        failed = comment | {"body": bot.render(error="failed")}
+        self.assertIsNone(check(failed))
+        other = event(repo="owner/repo", number=13)
+        self.assertIsNone(check(completed, current=other))
+
+    def test_workflow_loading_reaction_and_final_comment_paths(self):
+        workflow = (Path(__file__).parents[1] / "examples/prism-estimate.yml").read_text()
+        self.assertIn("  acknowledge:\n", workflow)
+        self.assertIn("-f content=eyes", workflow)
+        self.assertIn("<!-- prism-loading -->", workflow)
+        self.assertIn("### ⏳ Estimating", workflow)
+        self.assertIn("date -u", workflow)
+        self.assertIn("[Workflow run]($RUN_URL)", workflow)
+        self.assertIn("if: always() && ((steps.gate.outcome == 'success'", workflow)
+        self.assertIn("grep -q '<!-- prism-loading -->' comment.md", workflow)
+        self.assertIn("--event \"$GITHUB_EVENT_PATH\" --commit \"$commit\"", workflow)
+
     def test_saved_estimate_table_and_saved_prediction_spend(self):
         saved = json.loads((FIXTURES / "estimate-sympy-20590.json").read_text())["estimate"]
         prediction = json.loads((FIXTURES / "predict-httpx-2788.json").read_text())
@@ -193,7 +234,7 @@ class BotTests(unittest.TestCase):
     def test_workflow_resolves_default_and_historical_refs_once(self):
         workflow = (Path(__file__).parents[1] / "examples/prism-estimate.yml").read_text()
         section = workflow.split("      - name: Resolve one immutable source commit\n", 1)[1]
-        block = section.split("        run: |\n", 1)[1].split("      - uses:", 1)[0]
+        block = section.split("        run: |\n", 1)[1].split("      - name:", 1)[0]
         script = "\n".join(line.removeprefix("          ") for line in block.splitlines())
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
