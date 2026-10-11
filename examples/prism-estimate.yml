@@ -71,7 +71,7 @@ jobs:
           GIT_CONFIG_COUNT: 1
           GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.PRISME_READ_TOKEN }}@github.com/Bhavya031/Prisme.insteadOf
           GIT_CONFIG_VALUE_0: https://github.com/Bhavya031/Prisme
-        run: pip install "git+https://github.com/Bhavya031/Prisme.git@$PRISM_COMMIT" > /dev/null 2>&1
+        run: pip install "git+https://github.com/Bhavya031/Prisme.git@$PRISM_COMMIT" > /dev/null 2>&1 && python -c 'import neatlogs'
       - name: Resolve one immutable source commit
         id: source
         run: |
@@ -116,6 +116,7 @@ jobs:
         if: steps.gate.outputs.note == ''
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NEATLOGS_API_KEY: ${{ secrets.NEATLOGS_API_KEY }}
           GOBIN: ${{ runner.temp }}/bin
           PRISM_GLANCE: ${{ runner.temp }}/bin/glance
         run: |
