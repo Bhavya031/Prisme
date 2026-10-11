@@ -15,6 +15,10 @@ from . import models
 DEFAULT_OUTPUT_DIR = Path("benchmark-runs")
 COST_TYPE = "estimated_list_price"
 COST_NOTE = "Estimated from token counts and list prices. Not a cost recorded or billed by a provider."
+# Every cost Prism records for its own runs is the cost of finding files, never of solving the issue.
+COST_SCOPE = "file_discovery"
+COST_SCOPE_NOTE = ("Cost of Prism's file-discovery run only. It is not the cost of solving the issue; "
+                   "`prism solve-estimate` estimates that separately.")
 # Stages already in the showcase dataset; their rows must never be reused.
 EXISTING_STAGES = ("s0-exploration", "s1-agent-loop", "s2-pipeline-tuned", "s3-pipeline-clean")
 PROVIDERS = ("claude", "openai")
@@ -268,7 +272,8 @@ class RunStore:
             "finished_at": now(),
             "duration_seconds": round(duration, 2),
             "error": error_details(error) if error is not None else None,
-            "cost": {"type": COST_TYPE, "estimated_usd": estimated, "recorded_usd": None, "note": COST_NOTE},
+            "cost": {"type": COST_TYPE, "scope": COST_SCOPE, "estimated_usd": estimated, "recorded_usd": None,
+                     "note": COST_NOTE, "scope_note": COST_SCOPE_NOTE},
         })
         rows = export_rows(self.run["stage"], graded, self.settings)
         saved = {
