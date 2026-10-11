@@ -2,11 +2,11 @@
   "cfo": {
     "org_id": "102909",
     "scenario": "Main Scenario",
-    "page": "PENDING",
-    "budget_table": "PENDING",
-    "request_table": "PENDING",
-    "decision_table": "PENDING",
-    "column_prefix": "PENDING",
+    "page": "Engineering portfolio",
+    "budget_table": "Portfolio repository budgets",
+    "request_table": "Portfolio request allocations",
+    "decision_table": "Portfolio decision test",
+    "column_prefix": "Portfolio ",
     "shared_login_repos": [
       "Bhavya031/k-2",
       "Bhavya031/flask",

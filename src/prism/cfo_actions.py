@@ -172,10 +172,10 @@ def allocate(estimate_path, run_id, issue_number):
         raise RuntimeError("CFO MCP initialization failed")
     PREFIX = CFO["column_prefix"]
     decision_data, decision_rows = read_table(access_token, CFO["decision_table"], 2)
-    inputs = {"K2 test repository": repository, "K2 test issue URL": request["issue_url"],
-              "K2 test uncached input tokens": central["uncached_input"],
-              "K2 test cached input tokens": central["cached_input"],
-              "K2 test output tokens": central["output"]}
+    inputs = {PREFIX + "test repository": repository, PREFIX + "test issue URL": request["issue_url"],
+              PREFIX + "test uncached input tokens": central["uncached_input"],
+              PREFIX + "test cached input tokens": central["cached_input"],
+              PREFIX + "test output tokens": central["output"]}
     matches = [row for member, row in decision_rows if member == request_id]
     if len(matches) > 1 or (matches and any(matches[0].get(key) != value for key, value in inputs.items())):
         raise RuntimeError("CFO decision request ID already has different inputs")
@@ -183,7 +183,7 @@ def allocate(estimate_path, run_id, issue_number):
         mcp(access_token, "tools/call", {"name": "edit_table_blocks", "arguments": {
             "org_id": CFO["org_id"], "scenario": CFO["scenario"], "update": {
                 "target": CFO["decision_table"], "based_on": decision_data["as_of"],
-                "dimensions": [{"target": "K2 decision test request", "add_items": [request_id]}],
+                "dimensions": [{"target": PREFIX + "decision test request", "add_items": [request_id]}],
                 "values": {"columns": list(inputs), "rows": [[request_id, *inputs.values()]]},
             },
         }}, 3)
@@ -192,43 +192,53 @@ def allocate(estimate_path, run_id, issue_number):
     if len(matches) != 1 or any(matches[0].get(key) != value for key, value in inputs.items()):
         raise RuntimeError("CFO decision read-back did not confirm the request inputs")
     row = matches[0]
-    decision = row.get("K2 test decision")
-    model = row.get("K2 test chosen model")
-    reason = row.get("K2 test reason")
+    decision = row.get(PREFIX + "test decision")
+    model = row.get(PREFIX + "test chosen model")
+    reason = row.get(PREFIX + "test reason")
     if decision not in ("approved", "blocked") or not isinstance(reason, str) or not reason:
         raise RuntimeError("CFO decision or reason is missing or invalid")
     recommendations = []
     for index in range(1, 4):
-        name = row.get(f"K2 test recommendation {index}")
-        cost = row.get(f"K2 test recommendation {index} cost USD")
+        name = row.get(f"{PREFIX}test recommendation {index}")
+        cost = row.get(f"{PREFIX}test recommendation {index} cost USD")
         if not isinstance(name, str) or not name.strip():
             raise RuntimeError(f"CFO recommendation {index} is missing")
         recommendations.append({"model": name, "usd": float(usd(cost, f"recommendation {index} cost"))})
     recommended = {item["model"] for item in recommendations}
     other_models = []
     for column, value in row.items():
-        if column.startswith("cost — ") and column.endswith(" (USD)") and value not in (None, ""):
-            name = column[7:-6]
-            if name not in recommended:
-                other_models.append({"model": name, "usd": float(usd(value, column))})
+        for cost_prefix in (PREFIX + "cost — ", "cost — "):
+            if column.startswith(cost_prefix) and column.endswith(" (USD)") and value not in (None, ""):
+                name = column[len(cost_prefix):-6]
+                if name not in recommended:
+                    other_models.append({"model": name, "usd": float(usd(value, column))})
+                break
     other_models.sort(key=lambda item: (item["usd"], item["model"]))
     summary = {"predicted_files": estimate["assumptions"]["measurement"]["included_paths"],
-               "budget_usd": row.get("K2 test budget USD"), "spent_usd": row.get("K2 test spending USD"),
-               "reserved_before_usd": row.get("K2 test existing reservations USD"),
-               "max_budget_fraction": row.get("K2 test max budget fraction"),
-               "available_usd": row.get("K2 test available USD"),
-               "request_limit_usd": row.get("K2 test request limit USD"),
+               "budget_usd": row.get(PREFIX + "test budget USD"), "spent_usd": row.get(PREFIX + "test spending USD"),
+               "reserved_before_usd": row.get(PREFIX + "test existing reservations USD"),
+               "max_budget_fraction": row.get(PREFIX + "test max budget fraction"),
+               "available_usd": row.get(PREFIX + "test available USD"),
+               "request_limit_usd": row.get(PREFIX + "test request limit USD"),
                "chosen_model": model, "recommendations": recommendations, "other_models": other_models}
     request_data, rows = read_table(access_token, CFO["request_table"], 5)
-    if [column["display_name"] for column in request_data["columns"]] != [PREFIX + name for name in REQUEST_COLUMNS]:
+    columns = [PREFIX + name for name in REQUEST_COLUMNS]
+    month_column = PREFIX + "allocation month"
+    request_columns = [column["display_name"] for column in request_data["columns"]]
+    if request_columns not in (columns, columns + [month_column]):
         raise RuntimeError("CFO request table shape changed")
+    if month_column in request_columns:
+        month = row.get(PREFIX + "test allocation month")
+        if not isinstance(month, str) or not month:
+            raise RuntimeError(f"CFO decision row needs {PREFIX}test allocation month as text for the request table")
+        request["allocation_month"] = month
     if any(member == request_id for member, _ in rows):
         return summary | allocate_existing(access_token, None, request_id) | {"already_recorded": True}
     if decision == "blocked":
         return {"request_id": request_id, "decision": decision, "usd_cap": None, "reason": reason} | summary
-    amount = usd(row.get("K2 test allocated USD"), "allocated USD")
-    available = usd(row.get("K2 test available USD"), "available USD")
-    limit = usd(row.get("K2 test request limit USD"), "request limit USD")
+    amount = usd(row.get(PREFIX + "test allocated USD"), "allocated USD")
+    available = usd(row.get(PREFIX + "test available USD"), "available USD")
+    limit = usd(row.get(PREFIX + "test request limit USD"), "request limit USD")
     if not (0 < amount <= available and amount <= limit):
         raise RuntimeError("CFO approved allocation must be > 0 and <= available USD and request limit USD")
     if not isinstance(model, str) or not model.strip():
@@ -236,11 +246,13 @@ def allocate(estimate_path, run_id, issue_number):
     request["model"] = model
     request["estimated_usd"] = float(amount)
     request["reason"] = reason
-    columns = [PREFIX + name for name in REQUEST_COLUMNS]
     values = [repository, request["issue_url"], commit, model,
               *(central[key] for key in ("input", "uncached_input", "cached_input", "output", "total")),
               float(amount), "allocated", f"allocation/{request_id}", float(amount), float(amount),
               float(available - amount), reason]
+    if "allocation_month" in request:
+        columns.append(month_column)
+        values.append(request["allocation_month"])
     mcp(access_token, "tools/call", {"name": "edit_table_blocks", "arguments": {
         "org_id": CFO["org_id"], "scenario": CFO["scenario"], "update": {
             "target": CFO["request_table"], "based_on": request_data["as_of"],
@@ -274,6 +286,8 @@ def allocate_existing(access_token, request, request_id):
             raise RuntimeError("CFO allocation read-back has the wrong USD cap or reservation")
         if row[PREFIX + "reason"] != request["reason"]:
             raise RuntimeError("CFO allocation read-back has a different reason")
+        if "allocation_month" in request and row[PREFIX + "allocation month"] != request["allocation_month"]:
+            raise RuntimeError("CFO allocation read-back has a different allocation month")
     issue_url = row[PREFIX + "issue URL"]
     return {"request_id": request_id, "allocation_id": row[PREFIX + "allocation ID"],
             "repository": row[PREFIX + "request repository"], "issue": int(issue_url.rsplit("/", 1)[-1]),
