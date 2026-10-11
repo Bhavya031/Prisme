@@ -8,6 +8,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 
+from . import results
 from .types import Hit
 
 
@@ -91,16 +92,29 @@ def _search_http(term: str, repo: str, limit: int) -> list[Hit]:
 def search(term: str, repo: str, limit: int = 30) -> list[Hit]:
     if os.environ.get("PRISM_ENTIRE_TRANSPORT") == "http":
         return _search_http(term, repo, limit)
-    result = subprocess.run(
-        # Terms go after "--" so one starting with "-" is not read as a flag.
-        ["entire", "search", "--code", "--repo", repo, "--json", "--limit", str(limit), "--", term],
-        capture_output=True,
-        text=True,
-        timeout=45,
-    )
-    if result.returncode:
-        raise RuntimeError(result.stderr.strip() or "Entire search failed")
-    return _hits(json.loads(result.stdout))
+    try:
+        result = subprocess.run(
+            # Terms go after "--" so one starting with "-" is not read as a flag.
+            ["entire", "search", "--code", "--repo", repo, "--json", "--limit", str(limit), "--", term],
+            capture_output=True,
+            text=True,
+            timeout=45,
+        )
+        # Entire's own error text is shown, so scrub anything credential-shaped from it.
+        detail = (results.redact(result.stderr.strip()) or "no error output") if result.returncode else None
+        hits = None if detail else _hits(json.loads(result.stdout))
+    except FileNotFoundError:
+        detail = "the Entire CLI is not installed or is not on PATH"
+    except subprocess.TimeoutExpired:
+        detail = "the search timed out"
+    except (ValueError, KeyError, TypeError):
+        detail = "the search returned an unexpected response"
+    if detail:
+        raise RuntimeError(
+            f"Entire search failed for {repo}: {detail}. Check that ENTIRE_TOKEN is current and that "
+            f"`entire repo view /{repo} --json` reports ready. Git search was not used as a fallback."
+        )
+    return hits
 
 
 def search_many(terms: list[str], repo: str) -> dict[str, list[Hit]]:
@@ -121,14 +135,20 @@ def check_checkout(checkout: Path, commit: str) -> None:
         raise ValueError(f"Pinned search commit {commit} is unavailable in {checkout}")
 
 
-def search_many_at_commit(terms: list[str], checkout: Path, commit: str) -> dict[str, list[Hit]]:
-    """Search only Git objects at the pinned commit; the current Entire index may be newer."""
+def search_many_at_commit(terms: list[str], checkout: Path, commit: str,
+                          paths: list[str] | None = None) -> dict[str, list[Hit]]:
+    """Search only Git objects at the pinned commit; the current Entire index may be newer.
+
+    ``paths`` limits the search to those files; an empty list searches nothing.
+    """
+    if paths is not None and not paths:
+        return {}
     grouped = {}
     for term in dict.fromkeys(terms):
         try:
             result = subprocess.run(
-                ["git", "-C", str(checkout), "grep", "-n", "-z", "-i", "-I", "-F", "-m", "2", "-e", term,
-                 commit, "--"], capture_output=True, text=True, timeout=45,
+                ["git", "--literal-pathspecs", "-C", str(checkout), "grep", "-n", "-z", "-i", "-I", "-F", "-m", "2",
+                 "-e", term, commit, "--", *(paths or [])], capture_output=True, text=True, timeout=45,
             )
         except (OSError, subprocess.TimeoutExpired):
             raise RuntimeError("Pinned source search failed") from None

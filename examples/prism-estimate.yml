@@ -53,8 +53,8 @@ jobs:
       REPLAY_REF: ${{ vars.PRISM_REPLAY_REF }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       WORKER_MODEL: claude-sonnet-5-5
-      PRISM_COMMIT: 68901f8dfe438feb4a24aff81183958d18b114c6
-      GLANCE_COMMIT: 3465201a46801c96fe57958306e36eb3b3132679
+      PRISM_COMMIT: b11ff17aeae01ded39ca8f52da70e836a5c0b9c8
+      GLANCE_VERSION: v0.1.0
     steps:
       - uses: actions/setup-python@v5
         id: setup_python
@@ -116,12 +116,8 @@ jobs:
         if: steps.gate.outputs.note == ''
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GOPRIVATE: github.com/Bhavya031/*
           GOBIN: ${{ runner.temp }}/bin
           PRISM_GLANCE: ${{ runner.temp }}/bin/glance
-          GIT_CONFIG_COUNT: 1
-          GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.GLANCE_READ_TOKEN }}@github.com/Bhavya031/Glance.insteadOf
-          GIT_CONFIG_VALUE_0: https://github.com/Bhavya031/Glance
         run: |
           set -euo pipefail
           jq -e --arg repo "$GITHUB_REPOSITORY" --argjson number "$ISSUE_NUMBER" \
@@ -147,14 +143,24 @@ jobs:
           ensure_ready(sys.argv[1])
           PY
           commit="${{ steps.source.outputs.commit }}"
-          go install "github.com/Bhavya031/Glance/cmd/glance@$GLANCE_COMMIT" > /dev/null 2>&1 || {
-            echo 'Glance install failed; check GLANCE_READ_TOKEN access and the pinned commit' >&2
+          # Pinned Glance release binary, checked against the release's sha256 list before it is unpacked.
+          case "$(uname -m)" in x86_64) glance_arch=amd64 ;; aarch64 | arm64) glance_arch=arm64 ;; *) glance_arch=unsupported ;; esac
+          glance_archive="Glance_${GLANCE_VERSION#v}_linux_$glance_arch.tar.gz"
+          glance_url="https://github.com/Bhavya031/Glance/releases/download/$GLANCE_VERSION"
+          (cd "$RUNNER_TEMP" &&
+            curl -fsSL --retry 3 -O "$glance_url/$glance_archive" -O "$glance_url/checksums.txt" &&
+            grep -F "  $glance_archive" checksums.txt | sha256sum -c - > /dev/null &&
+            mkdir -p "$GOBIN" && tar -xzf "$glance_archive" -C "$GOBIN" glance) > /dev/null 2>&1 || {
+            echo "Glance $GLANCE_VERSION download or sha256 check failed for $glance_archive; check that the release and its checksums.txt exist" >&2
             exit 1
           }
           python -c 'import os; from prism import glance; glance.measure("count check", glance=os.environ["PRISM_GLANCE"])' > /dev/null
           status=0
+          # Entire names candidate files for a live issue; a replay searches only the pinned commit.
+          search=entire
+          if [ -n "$REPLAY_REF" ]; then search=git; fi
           prism predict "$issue_url" --repo "$entire_repo" --event "$GITHUB_EVENT_PATH" \
-            --commit "$commit" --checkout source \
+            --commit "$commit" --checkout source --search "$search" \
             --provider claude --format json --max-cost-usd 0.10 --max-output-tokens 4000 \
             --max-extra-rounds 1 --timeout-seconds 180 > predict.json 2> predict.err || status=$?
           if [ "$status" -eq 0 ]; then
