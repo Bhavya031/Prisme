@@ -89,6 +89,15 @@ class CFOActions(unittest.TestCase):
         self.assertEqual(run.call_args.args[0][3], "CFO_SECRET_WRITE_TOKEN")
         urlopen.assert_not_called()
 
+    def test_readback_issue_comes_from_request_url(self):
+        issue_url = "https://github.com/Bhavya031/k-2/issues/41"
+        row = BASE_ROW | {PREFIX + "issue URL": issue_url}
+        request = {"repository": "Bhavya031/k-2", "issue_url": issue_url,
+                   "pinned_commit": COMMIT, "model": "claude-sonnet-5-5", "estimated_usd": 1.40262}
+        with patch.object(cfo_actions, "read_table", return_value=(None, [(REQUEST_ID, row)])):
+            result = cfo_actions.allocate_existing("access", request, REQUEST_ID)
+        self.assertEqual(result["issue"], 41)
+
 
 if __name__ == "__main__":
     unittest.main()

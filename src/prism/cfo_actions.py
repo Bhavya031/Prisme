@@ -215,7 +215,8 @@ def allocate_existing(access_token, request, request_id):
     if row[PREFIX + "allocated USD cap"] != request["estimated_usd"] or row[PREFIX + "reservation USD"] != request["estimated_usd"]:
         raise RuntimeError("CFO allocation read-back has the wrong USD cap or reservation")
     return {"request_id": request_id, "allocation_id": row[PREFIX + "allocation ID"],
-            "repository": request["repository"], "issue": 40, "issue_url": request["issue_url"],
+            "repository": request["repository"], "issue": int(request["issue_url"].rsplit("/", 1)[-1]),
+            "issue_url": request["issue_url"],
             "pinned_commit": request["pinned_commit"],
             "usd_cap": row[PREFIX + "allocated USD cap"],
             "decision": row[PREFIX + "decision"], "reason": row[PREFIX + "reason"]}
