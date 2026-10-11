@@ -50,7 +50,7 @@ jobs:
         if: ${{ !inputs.preflight_only }}
         with:
           repository: Bhavya031/Prisme
-          ref: ao/prisme-25/cfo-actions
+          ref: main
           path: prism
           token: ${{ secrets.PRISME_READ_TOKEN }}
           persist-credentials: false
