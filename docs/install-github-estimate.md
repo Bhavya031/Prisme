@@ -3,6 +3,7 @@
 1. Copy [the template](../examples/prism-estimate.yml) to `.github/workflows/prism-estimate.yml` in the repository where issues are opened. The template is stored outside Prisme's workflow directory so it does not run on Prisme issues. Copy it unchanged; it reads the repository and issue from the event. Set Actions workflow permissions to allow issue comments if repository settings override the YAML permissions.
 2. Set these Actions secrets in that repository:
    - `ANTHROPIC_API_KEY`: required for the default Claude file prediction.
+   - `NEATLOGS_API_KEY`: optional; sends prediction traces to Neatlogs when set. An absent secret leaves estimates untraced.
    - `ENTIRE_TOKEN`: read access to this repository in Entire. The workflow checks that its `gh/owner/repo` entry is ready before making model calls, and a live issue searches it for candidate files.
    - `PRISME_READ_TOKEN`: GitHub read access to the private `Bhavya031/Prisme` repository for installation.
 
