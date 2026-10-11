@@ -48,7 +48,6 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GITHUB_TOKEN: ${{ github.token }}
       PRISM_SKIP_DOTENV: "1"
-      PRISM_ENTIRE_TRANSPORT: http
       ENTIRE_TOKEN: ${{ secrets.ENTIRE_TOKEN }}
       ISSUE_NUMBER: ${{ github.event.issue.number }}
       REPLAY_REF: ${{ vars.PRISM_REPLAY_REF }}
@@ -93,6 +92,7 @@ jobs:
         # This reply has no Prism marker, so it cannot extend the cooldown or replace an estimate.
         run: gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$NOTE"
       - name: Reserve this issue before any paid call
+        id: reserve
         if: steps.gate.outputs.note == ''
         run: |
           printf '%s\n' '<!-- prism-estimate -->' '<!-- prism-loading -->' \
@@ -136,6 +136,11 @@ jobs:
             echo 'ENTIRE_TOKEN is required; register and index this repository with Entire first' >&2
             exit 1
           fi
+          go install github.com/entireio/cli/cmd/entire@v0.11.4 > /dev/null 2>&1 || {
+            echo 'Entire CLI installation failed before any model call' >&2
+            exit 1
+          }
+          export PATH="$GOBIN:$PATH"
           python - "$entire_repo" <<'PY'
           import sys
           from prism.entire import ensure_ready
@@ -162,14 +167,11 @@ jobs:
             --errors predict.err estimate.err --run-url "$RUN_URL" > comment.md || status=$?
           exit "$status"
       - name: Post or update the one Prism comment
-        if: >-
-          always() && ((steps.gate.outcome == 'success' && steps.gate.outputs.note == '') ||
-          steps.setup_python.outcome == 'failure' || steps.setup_go.outcome == 'failure' ||
-          steps.install.outcome == 'failure' || steps.source.outcome == 'failure')
+        if: always() && (failure() || steps.reserve.outcome == 'success')
         run: |
-          if [ "${{ steps.gate.outcome }}" != 'success' ]; then
+          if [ "${{ steps.reserve.outcome }}" != 'success' ]; then
             gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
-              --body "Prism setup failed before estimation. See the [workflow run]($RUN_URL)."
+              --body "Prism stopped before it could reserve this issue. See the [workflow run]($RUN_URL)."
             exit 0
           fi
           if [ ! -s comment.md ] || grep -q '<!-- prism-loading -->' comment.md; then

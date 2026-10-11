@@ -125,21 +125,20 @@ class BotTests(unittest.TestCase):
         self.assertIn("### ⏳ Estimating", workflow)
         self.assertIn("date -u", workflow)
         self.assertIn("[Workflow run]($RUN_URL)", workflow)
-        self.assertIn("always() && ((steps.gate.outcome == 'success'", workflow)
+        self.assertIn("if: always() && (failure() || steps.reserve.outcome == 'success')", workflow)
         self.assertIn("grep -q '<!-- prism-loading -->' comment.md", workflow)
         self.assertIn("--event \"$GITHUB_EVENT_PATH\" --commit \"$commit\"", workflow)
 
-    def test_pre_gate_failures_get_unmarked_replies_without_replacing_estimates(self):
+    def test_gate_and_reservation_failures_preserve_existing_estimate(self):
         workflow = (Path(__file__).parents[1] / "examples/prism-estimate.yml").read_text()
         final = workflow.split("      - name: Post or update the one Prism comment\n", 1)[1].split("      - uses:", 1)[0]
-        for step in ("setup_python", "setup_go", "install", "source"):
-            self.assertIn(f"steps.{step}.outcome == 'failure'", final)
-        reply = final.split("if [ \"${{ steps.gate.outcome }}\" != 'success' ]; then", 1)[1].split("          fi", 1)[0]
+        self.assertIn("failure() || steps.reserve.outcome == 'success'", final)
+        self.assertIn("id: reserve", workflow)
+        reply = final.split("if [ \"${{ steps.reserve.outcome }}\" != 'success' ]; then", 1)[1].split("          fi", 1)[0]
         self.assertIn('gh issue comment "$ISSUE_NUMBER"', reply)
         self.assertNotIn(bot.MARKER, reply)
         self.assertIn("exit 0", reply)
         script = "\n".join(line.removeprefix("          ") for line in final.split("        run: |\n", 1)[1].splitlines())
-        script = script.replace("${{ steps.gate.outcome }}", "skipped")
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             existing = bot.MARKER + "\n### Prism solve-cost estimate\n"
@@ -151,12 +150,21 @@ class BotTests(unittest.TestCase):
             env = os.environ | {"PATH": f"{root}:{os.environ['PATH']}", "CALLS": str(calls),
                                 "ISSUE_NUMBER": "12", "GITHUB_REPOSITORY": "owner/repo",
                                 "RUN_URL": "https://github.com/owner/repo/actions/runs/3"}
-            result = subprocess.run(["bash", "-e", "-c", script], cwd=root, env=env,
-                                    capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual((root / "comment.md").read_text(), existing)
-            self.assertEqual(calls.read_text().count("issue comment 12"), 1)
-            self.assertNotIn("<!-- prism-estimate -->", calls.read_text())
+            for outcome in ("skipped", "failure"):
+                calls.unlink(missing_ok=True)
+                result = subprocess.run(["bash", "-e", "-c", script.replace("${{ steps.reserve.outcome }}", outcome)],
+                                        cwd=root, env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual((root / "comment.md").read_text(), existing)
+                self.assertEqual(calls.read_text().count("issue comment 12"), 1)
+                self.assertNotIn(bot.MARKER, calls.read_text())
+
+    def test_template_uses_pinned_entire_cli_transport(self):
+        workflow = (Path(__file__).parents[1] / "examples/prism-estimate.yml").read_text()
+        run = workflow.split("      - name: Run estimate\n", 1)[1]
+        self.assertNotIn("PRISM_ENTIRE_TRANSPORT: http", workflow)
+        self.assertIn("go install github.com/entireio/cli/cmd/entire@v0.11.4", run)
+        self.assertLess(run.index('export PATH="$GOBIN:$PATH"'), run.index("from prism.entire import ensure_ready"))
 
     def test_saved_estimate_table_and_saved_prediction_spend(self):
         saved = json.loads((FIXTURES / "estimate-sympy-20590.json").read_text())["estimate"]
