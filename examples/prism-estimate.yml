@@ -1,4 +1,4 @@
-name: Prism estimate
+name: Prism automated estimation and allocation
 
 on:
   issues:
@@ -7,6 +7,7 @@ on:
     types: [created]
 
 permissions:
+  actions: read
   contents: read
   issues: write
 
@@ -43,6 +44,8 @@ jobs:
     # Serialize all issues so the repository-wide reservation is visible before another gate runs.
     concurrency: prism-estimate
     runs-on: ubuntu-latest
+    outputs:
+      estimated: ${{ steps.estimate.outcome == 'success' }}
     timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
@@ -200,3 +203,62 @@ jobs:
             estimate.json
             comment.md
           if-no-files-found: ignore
+  allocate:
+    needs: estimate
+    if: github.repository == 'Bhavya031/k-2' && needs.estimate.outputs.estimated == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: prism-cfo-allocation
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CFO_OAUTH_CLIENT_ID: ${{ secrets.CFO_OAUTH_CLIENT_ID }}
+      CFO_OAUTH_REFRESH_TOKEN: ${{ secrets.CFO_OAUTH_REFRESH_TOKEN }}
+      CFO_SECRET_WRITE_TOKEN: ${{ secrets.CFO_SECRET_WRITE_TOKEN }}
+    steps:
+      - name: Check GitHub secret read and write access before CFO OAuth
+        env:
+          GH_TOKEN: ${{ secrets.CFO_SECRET_WRITE_TOKEN }}
+        run: |
+          if output=$(gh api -i repos/Bhavya031/k-2/actions/secrets/public-key 2>&1); then
+            printf 'public-key GET: %s\n' "$(printf '%s\n' "$output" | grep -m1 '^HTTP/')"
+          else
+            printf '%s\n' "$output" | grep -E '^HTTP/|^gh:' || true
+            exit 1
+          fi
+          if output=$(GH_DEBUG=api gh secret set CFO_SECRET_WRITE_PREFLIGHT --repo Bhavya031/k-2 --body ok 2>&1); then
+            printf '%s\n' "$output" | grep '^< HTTP/' | sed 's/^</dummy secret set:/'
+          else
+            printf '%s\n' "$output" | grep -E '^< HTTP/|^gh:' || true
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          repository: Bhavya031/Prisme
+          ref: ao/prisme-25/cfo-actions
+          path: prism
+          token: ${{ secrets.PRISME_READ_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download this run's estimate
+        env:
+          RUN_ID: ${{ github.run_id }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "prism-estimate-$ISSUE_NUMBER" --dir "$RUNNER_TEMP/prism-estimate"
+          test -s "$RUNNER_TEMP/prism-estimate/estimate.json"
+      - name: Allocate in the synthetic CFO.ai tables and read back
+        env:
+          RUN_ID: ${{ github.run_id }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          PYTHONPATH: ${{ github.workspace }}/prism/src
+        run: |
+          python -m prism.cfo_actions "$RUNNER_TEMP/prism-estimate/estimate.json" "$RUN_ID" \
+            --issue-number "$ISSUE_NUMBER" --output "$RUNNER_TEMP/cfo-allocation.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prism-cfo-allocation-${{ github.event.issue.number }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/cfo-allocation.json
