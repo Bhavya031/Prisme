@@ -34,6 +34,15 @@ def refresh_access_token():
     writer = os.environ.get("CFO_SECRET_WRITE_TOKEN")
     if not all((client_id, refresh_token, writer)):
         raise RuntimeError("CFO_OAUTH_CLIENT_ID, CFO_OAUTH_REFRESH_TOKEN, and CFO_SECRET_WRITE_TOKEN are required")
+    env = os.environ.copy()
+    env["GH_TOKEN"] = writer
+    # Prove secret writes work before rotating the only stored refresh token.
+    preflight = subprocess.run(
+        ["gh", "secret", "set", "CFO_SECRET_WRITE_TOKEN", "--repo", "Bhavya031/k-2"],
+        input=writer, text=True, capture_output=True, env=env,
+    )
+    if preflight.returncode:
+        raise RuntimeError("CFO secret-write token cannot update k-2 Actions secrets; OAuth refresh was not attempted")
     payload = urllib.parse.urlencode({
         "grant_type": "refresh_token", "client_id": client_id, "refresh_token": refresh_token,
     }).encode()
@@ -50,8 +59,6 @@ def refresh_access_token():
     if not result.get("access_token") or not result.get("refresh_token"):
         raise RuntimeError("CFO OAuth refresh returned no access or refresh token")
     # Refresh tokens rotate; persist the replacement before using the access token.
-    env = os.environ.copy()
-    env["GH_TOKEN"] = writer
     for attempt in range(3):
         saved = subprocess.run(
             ["gh", "secret", "set", "CFO_OAUTH_REFRESH_TOKEN", "--repo", "Bhavya031/k-2"],

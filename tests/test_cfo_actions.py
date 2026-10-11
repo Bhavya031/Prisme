@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -74,6 +76,17 @@ class CFOActions(unittest.TestCase):
             result = cfo_actions.allocate(self.estimate, 38138900610)
         self.assertEqual(result["decision"], "allocated")
         self.assertEqual(call.call_count, 1)
+
+    def test_secret_write_failure_does_not_rotate_refresh_token(self):
+        secrets = {"CFO_OAUTH_CLIENT_ID": "client", "CFO_OAUTH_REFRESH_TOKEN": "refresh",
+                   "CFO_SECRET_WRITE_TOKEN": "writer"}
+        with patch.dict(os.environ, secrets), \
+             patch.object(cfo_actions.subprocess, "run", return_value=subprocess.CompletedProcess([], 1)) as run, \
+             patch.object(cfo_actions.urllib.request, "urlopen") as urlopen:
+            with self.assertRaisesRegex(RuntimeError, "OAuth refresh was not attempted"):
+                cfo_actions.refresh_access_token()
+        self.assertEqual(run.call_args.args[0][3], "CFO_SECRET_WRITE_TOKEN")
+        urlopen.assert_not_called()
 
 
 if __name__ == "__main__":
