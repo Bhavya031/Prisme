@@ -82,9 +82,16 @@ jobs:
           [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { echo 'Could not resolve a source commit' >&2; exit 1; }
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
           echo "Source commit: $commit"
+      - name: Read estimate settings
+        run: |
+          # Settings come from this repository's default branch, not from the replayed commit.
+          gh api -H 'Accept: application/vnd.github.raw' "repos/$GITHUB_REPOSITORY/contents/.github/prism.json" > prism.json || {
+            echo '.github/prism.json is required in this repository; copy examples/prism.json from Prisme' >&2
+            exit 1
+          }
       - name: Check event, authorization, duplicates, and repository cooldown
         id: gate
-        run: prism issue-gate --event "$GITHUB_EVENT_PATH" --commit "${{ steps.source.outputs.commit }}" >> "$GITHUB_OUTPUT"
+        run: prism issue-gate --event "$GITHUB_EVENT_PATH" --commit "${{ steps.source.outputs.commit }}" --cooldown-minutes "$(jq -r '.estimate.cooldown_minutes // 10' prism.json)" >> "$GITHUB_OUTPUT"
       - name: Report repository cooldown
         if: steps.gate.outputs.note != ''
         env:
@@ -128,11 +135,6 @@ jobs:
           expected_url="https://github.com/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER"
           [ "$issue_url" = "$expected_url" ] || { echo 'Event issue URL does not match this repository and issue' >&2; exit 1; }
           jq -r '[.issue.title, (.issue.body // "")] | join("\n\n")' "$GITHUB_EVENT_PATH" > issue.txt
-          # Settings come from this repository's default branch, not from the replayed commit.
-          gh api -H 'Accept: application/vnd.github.raw' "repos/$GITHUB_REPOSITORY/contents/.github/prism.json" > prism.json || {
-            echo '.github/prism.json is required in this repository; copy examples/prism.json from Prisme' >&2
-            exit 1
-          }
           setting() { jq -er ".estimate.$1" prism.json || { echo ".github/prism.json has no estimate.$1" >&2; exit 1; }; }
           provider=$(setting provider)
           worker_model=$(setting worker_model)
