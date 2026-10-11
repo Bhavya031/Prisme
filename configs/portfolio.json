@@ -19,7 +19,7 @@
     ]
   },
   "estimate": {
-    "cooldown_minutes": 10,
+    "cooldown_minutes": 2,
     "provider": "openai",
     "worker_model": "gpt-6-sol",
     "max_cost_usd": 0.05,
