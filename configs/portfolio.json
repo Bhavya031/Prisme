@@ -1,0 +1,30 @@
+{
+  "cfo": {
+    "org_id": "102909",
+    "scenario": "Main Scenario",
+    "page": "PENDING",
+    "budget_table": "PENDING",
+    "request_table": "PENDING",
+    "decision_table": "PENDING",
+    "column_prefix": "PENDING",
+    "shared_login_repos": [
+      "Bhavya031/k-2",
+      "Bhavya031/flask",
+      "Bhavya031/werkzeug",
+      "Bhavya031/jinja",
+      "Bhavya031/click",
+      "Bhavya031/markupsafe",
+      "Bhavya031/itsdangerous",
+      "Bhavya031/quart"
+    ]
+  },
+  "estimate": {
+    "cooldown_minutes": 10,
+    "provider": "openai",
+    "worker_model": "gpt-6-sol",
+    "max_cost_usd": 0.05,
+    "max_output_tokens": 4000,
+    "max_extra_rounds": 1,
+    "timeout_seconds": 180
+  }
+}

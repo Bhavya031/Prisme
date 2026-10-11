@@ -43,11 +43,11 @@ flowchart TD
 
 ## Install
 
-Follow [the setup guide](docs/SETUP.md) or run [`bash scripts/setup-github.sh /path/to/your/repo`](scripts/setup-github.sh) from a Prisme checkout. Copy the small caller files [`examples/prism-estimate.yml`](examples/prism-estimate.yml) and [`examples/prism-cfo-allocation.yml`](examples/prism-cfo-allocation.yml) once to the target repository's `.github/workflows/`; their job logic runs from Prisme. Set the target repository's secrets and commit its `.github/prism.json` on the default branch. Prisme must be public for public forks to call its workflows.
+Follow [the setup guide](docs/SETUP.md) or run [`bash scripts/setup-github.sh /path/to/your/repo`](scripts/setup-github.sh) from a Prisme checkout. Copy the small caller files [`examples/prism-estimate.yml`](examples/prism-estimate.yml) and [`examples/prism-cfo-allocation.yml`](examples/prism-cfo-allocation.yml) once to the target repository's `.github/workflows/`; their job logic runs from Prisme. Set the target repository's secrets. Commit `.github/prism.json` on its default branch only when using per-repository settings; for shared settings, set `config: configs/portfolio.json` in both callers. Prisme must be public for public forks to call its workflows.
 
 ## Configuration
 
-The workflows read `.github/prism.json` from the target repository's default branch. The [`examples/prism.json`](examples/prism.json) shape has two groups:
+The workflows read `.github/prism.json` from the target repository's default branch unless both callers set `config` to a JSON file in Prisme at the pinned ref. The [`examples/prism.json`](examples/prism.json) shape has two groups:
 
 | Group | Keys |
 |---|---|

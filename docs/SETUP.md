@@ -1,6 +1,6 @@
 # Set up Prism on a GitHub repository
 
-From a Prisme checkout, run `bash scripts/setup-github.sh /path/to/your/repo`. You need `gh` authenticated for that repository and permission to set its Actions secrets. The command asks for every setting, hides secret input, writes `.github/prism.json`, and copies the two small caller files in `examples/` to `.github/workflows/`. Review and commit those three files on the target repository's default branch. It stops if any destination file already exists. Prisme must be public before public forks can call its reusable workflows.
+From a Prisme checkout, run `bash scripts/setup-github.sh /path/to/your/repo`. You need `gh` authenticated for that repository and permission to set its Actions secrets. The command asks for every setting, hides secret input, writes `.github/prism.json` when using a per-repository config, and copies the two small caller files in `examples/` to `.github/workflows/`. Review and commit the two callers, plus `.github/prism.json` if generated, on the target repository's default branch. It stops if any destination file already exists. Prisme must be public before public forks can call its reusable workflows.
 
 Before opening an issue, register and index the same `owner/repo` in Entire. [The existing install guide](install-github-estimate.md#entire-setup-and-current-credential-limit) gives the available CLI commands. The workflow requires `/gh/owner/repo` to report `ready` before it makes a model call. Set repository Actions permissions to allow the workflow's `issues: write`, `contents: read`, and `actions: read` declarations. An owner, member, or collaborator can open an issue or comment exactly `/prism estimate` to start an estimate; a successful estimate starts allocation.
 
@@ -10,7 +10,8 @@ These secrets are passed explicitly by the caller workflows. Set them in the **t
 
 | Secret | What it is | Where to get it | Required? |
 |---|---|---|---|
-| `ANTHROPIC_API_KEY` | Key for the example's Claude prediction and estimate calls. | Anthropic API account; issuance steps are not documented in code. | Yes for the example provider. |
+| `ANTHROPIC_API_KEY` | Key for Claude prediction and estimation. | Anthropic API account. | Only when `estimate.provider` is `claude`. |
+| `OPENAI_API_KEY` | Key for OpenAI prediction and estimation. | OpenAI API account. | Only when `estimate.provider` is `openai`. |
 | `NEATLOGS_API_KEY` | Sends prediction traces to Neatlogs. | Neatlogs account; issuance steps are not documented in code. | No. Press Enter to skip. |
 | `ENTIRE_TOKEN` | Entire credential for searching the indexed target repository. | Log in to Entire in the region containing the mirror and create a token there; the exact issuance flow is not documented in code. | Yes. |
 | `PRISME_READ_TOKEN` | GitHub token that can read private `Bhavya031/Prisme`, used by install and checkout. | GitHub personal access token with Prisme Contents read permission. | Only while Prisme is private. |
@@ -18,24 +19,33 @@ These secrets are passed explicitly by the caller workflows. Set them in the **t
 | `CFO_OAUTH_REFRESH_TOKEN` | Rotating CFO.ai OAuth refresh token. | CFO.ai browser authorization; obtaining it is not documented in code. | Yes for allocation. |
 | `CFO_SECRET_WRITE_TOKEN` | Separate GitHub token used to update the target repository's Actions secrets after CFO.ai rotates the refresh token. | GitHub personal access token with **Secrets: Read and write** permission in every repository sharing the login; token creation steps are not documented in code. | Yes for allocation. |
 
-`.github/prism.json` follows [`examples/prism.json`](../examples/prism.json). The setup command asks for every field; it offers the example estimate values and scenario name as defaults. Do not use the example CFO organisation or table names unless they exist in your CFO.ai workspace. Optional `cfo.shared_login_repos` is an array of unique `owner/repo` names including the current repository. Put the same list and the same CFO login secrets in all seven repositories; omit the field to update only the current repository.
+## Configuration
 
-| Field | What it is | Where to get it | Required? |
+By default, each caller reads `.github/prism.json` from the target repository's default branch. To share one file, add `config: configs/portfolio.json` under `with:` in **both** caller workflows, immediately after `prisme_ref: main`. That file is read from Prisme at `prisme_ref`; the target repository needs only `.github/workflows/prism-estimate.yml` and `.github/workflows/prism-cfo-allocation.yml`, copied from `examples/`. The setup script accepts the same shared config path and then creates only these two callers. Leave `config` out to keep the per-repository behavior. Keep `prisme_ref` equal to the ref in each caller's `uses: ...@main` line.
+
+[`configs/portfolio.json`](../configs/portfolio.json) sets OpenAI, `gpt-6-sol`, and the shared CFO login repositories. Replace every `PENDING` CFO.ai table value before allocation; a `PENDING` value stops the allocation before CFO.ai login. Put the same CFO OAuth client ID, current refresh token, and GitHub secret-write token in every listed repository. Run one allocation at a time across them.
+
+Every key below is inside `prism.json`. “None” means the workflow or code requires a value rather than supplying a default.
+
+| Key | What it does | Default | Example |
 |---|---|---|---|
-| `cfo.org_id` | Organisation passed to CFO.ai model tools. | Your CFO.ai organisation; how to find its ID is not documented in code. | Yes, nonempty string. |
-| `cfo.scenario` | Scenario containing the tables. | Choose or create it in CFO.ai; exact navigation is not documented in code. | Yes, nonempty string. |
-| `cfo.page` | Page that must contain the configured decision and request tables. | Choose or create it in the CFO.ai scenario; exact navigation is not documented in code. | Yes, nonempty string. |
-| `cfo.budget_table` | Exact display name of the repository budget table. | Name it when creating the table on `cfo.page`. | Yes, nonempty string. |
-| `cfo.request_table` | Exact display name of the allocation request table. | Name it when creating the table on `cfo.page`. | Yes, nonempty string. |
-| `cfo.decision_table` | Exact display name of the CFO.ai decision test table; the example uses `K2 decision test`. | Use the table connected to the saved budget rule in CFO.ai; how to create that connection is not documented in code. | Yes, nonempty string. |
-| `cfo.column_prefix` | Prefix on budget and request column names below, including the request ID dimension; decision test columns have fixed `K2` names. | Choose it when creating the budget and request tables; an empty prefix is rejected by the code. | Yes, nonempty string. |
-| `estimate.cooldown_minutes` | Repository-wide delay between Prism estimates. | Choose a nonnegative number of minutes; example: `10`. | Yes; workflow falls back to `10` if absent. |
-| `estimate.provider` | Model provider for file prediction and estimation. | Choose a provider supported by Prism; example: `claude`. | Yes. |
-| `estimate.worker_model` | Model whose future solve cost is estimated. | Choose the worker model you plan to use; example: `claude-sonnet-5-5`. | Yes. |
-| `estimate.max_cost_usd` | Maximum cost for file prediction calls. | Choose a USD limit; example: `0.05`. | Yes. |
-| `estimate.max_output_tokens` | Prediction output token limit. | Choose a count; example: `4000`. | Yes. |
-| `estimate.max_extra_rounds` | Additional prediction rounds allowed. | Choose a count; example: `1`. | Yes. |
-| `estimate.timeout_seconds` | Prediction time limit. | Choose a duration; example: `180`. | Yes. |
+| `cfo.org_id` | CFO.ai organisation ID. | None | `"102909"` |
+| `cfo.scenario` | Scenario holding the tables. | None | `"Main Scenario"` |
+| `cfo.page` | Page holding decision and request tables. | None | `"K2 budgets"` |
+| `cfo.budget_table` | Repository budget table name. | None | `"K2 repository budgets"` |
+| `cfo.request_table` | Allocation request table name. | None | `"K2 request allocations"` |
+| `cfo.decision_table` | Decision test table name, fed by the saved budget rule. | None | `"K2 decision test"` |
+| `cfo.column_prefix` | Prefix for budget and request columns. | None | `"K2 "` |
+| `cfo.shared_login_repos` | Repositories receiving each rotated refresh token; include the current repo and use the same list everywhere. | Current repo only | `["Bhavya031/k-2", "Bhavya031/flask"]` |
+| `estimate.cooldown_minutes` | Delay between estimates in one repository. | `10` | `10` |
+| `estimate.provider` | Provider for prediction and estimation. | None | `"openai"` |
+| `estimate.worker_model` | Model whose future solve cost is estimated. | None | `"gpt-6-sol"` |
+| `estimate.max_cost_usd` | Limit for prediction calls, in USD. | None | `0.05` |
+| `estimate.max_output_tokens` | Output token limit for prediction calls. | None | `4000` |
+| `estimate.max_extra_rounds` | Additional prediction rounds. | None | `1` |
+| `estimate.timeout_seconds` | Prediction time limit. | None | `180` |
+
+`gpt-6-sol` has built-in prices. A worker model absent from Prism's built-in price list makes estimation fail with “No price for worker model”; the workflow does not supply a separate pricing file or catalog.
 
 The optional repository Actions variable `PRISM_REPLAY_REF` is a maintainer-chosen branch, tag, or commit for replaying an older source commit. Find or set it under Settings → Secrets and variables → Actions → Variables. Leave it unset for the default branch. The setup command does not ask for it because it is not needed for a new installation.
 
@@ -64,5 +74,5 @@ You can run the manual **Prism automated estimation and allocation validation** 
 ## Paste this into your coding agent
 
 ```text
-Set up Prism automated estimation and allocation on my GitHub repository interactively. Read Prisme's docs/SETUP.md, examples/prism-estimate.yml, examples/prism-cfo-allocation.yml, examples/prism.json, src/prism/cfo_actions.py, and src/prism/bot.py first. Ask me for the target repository and each required .github/prism.json field and each secret listed in docs/SETUP.md; ask whether I want the optional NEATLOGS_API_KEY and shared-login repository list. Do not ask me to paste secret values into chat or display them: have me enter them hidden in a terminal. Use bash scripts/setup-github.sh /path/to/my/repo from a Prisme checkout, or perform its same steps with gh CLI: set the target repository Actions secrets from hidden stdin, write .github/prism.json, and copy the two small example caller workflows unchanged. Ask me to create the CFO.ai page and tables using the prompt in docs/SETUP.md and to make my Entire mirror ready. Check the generated config and workflow destinations, then tell me which files to commit and push to the target repository's default branch. Do not run a workflow or call a paid model without my request.
+Set up Prism automated estimation and allocation on my GitHub repository interactively. Read Prisme's docs/SETUP.md, examples/prism-estimate.yml, examples/prism-cfo-allocation.yml, examples/prism.json, src/prism/cfo_actions.py, and src/prism/bot.py first. Ask me for the target repository, whether to use a shared Prisme config, and each required .github/prism.json field when configuring locally and each secret listed in docs/SETUP.md; ask whether I want the optional NEATLOGS_API_KEY and shared-login repository list. Do not ask me to paste secret values into chat or display them: have me enter them hidden in a terminal. Use bash scripts/setup-github.sh /path/to/my/repo from a Prisme checkout, or perform its same steps with gh CLI: set the target repository Actions secrets from hidden stdin, write .github/prism.json only for local config, and copy the two small example caller workflows with a matching `config` input for shared config. Ask me to create the CFO.ai page and tables using the prompt in docs/SETUP.md and to make my Entire mirror ready. Check the generated config and workflow destinations, then tell me which files to commit and push to the target repository's default branch. Do not run a workflow or call a paid model without my request.
 ```

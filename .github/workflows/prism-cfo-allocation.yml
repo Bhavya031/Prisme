@@ -6,6 +6,9 @@ on:
       prisme_ref:
         required: true
         type: string
+      config:
+        required: false
+        type: string
       run_id:
         required: true
         type: string
@@ -45,11 +48,25 @@ jobs:
       CFO_OAUTH_REFRESH_TOKEN: ${{ secrets.CFO_OAUTH_REFRESH_TOKEN }}
       CFO_SECRET_WRITE_TOKEN: ${{ secrets.CFO_SECRET_WRITE_TOKEN }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Bhavya031/Prisme
+          ref: ${{ inputs.prisme_ref }}
+          path: prism
+          token: ${{ secrets.PRISME_READ_TOKEN || github.token }}
+          persist-credentials: false
       - name: Check GitHub secret read and write access before CFO OAuth
         env:
           GH_TOKEN: ${{ secrets.CFO_SECRET_WRITE_TOKEN }}
+          CONFIG: ${{ inputs.config }}
         run: |
-          gh api -H 'Accept: application/vnd.github.raw' "repos/$GITHUB_REPOSITORY/contents/.github/prism.json" > "$RUNNER_TEMP/prism.json"
+          if [ -n "$CONFIG" ]; then
+            [[ "$CONFIG" =~ ^[A-Za-z0-9_./-]+$ && "$CONFIG" != /* && "$CONFIG" != *..* && -f "prism/$CONFIG" ]] || { echo 'config must name a JSON file inside Prisme' >&2; exit 1; }
+            cp "prism/$CONFIG" "$RUNNER_TEMP/prism.json"
+          else
+            gh api -H 'Accept: application/vnd.github.raw' "repos/$GITHUB_REPOSITORY/contents/.github/prism.json" > "$RUNNER_TEMP/prism.json"
+          fi
+          jq -e '[.cfo.page, .cfo.budget_table, .cfo.request_table, .cfo.decision_table, .cfo.column_prefix] | all(. != "PENDING")' "$RUNNER_TEMP/prism.json" > /dev/null || { echo 'CFO.ai table settings still contain PENDING' >&2; exit 1; }
           jq -e --arg current "$GITHUB_REPOSITORY" '
             (.cfo.shared_login_repos // [$current]) as $repos |
             ($repos | type == "array" and length > 0 and index($current) != null and length == (unique | length)) and
@@ -63,14 +80,6 @@ jobs:
               echo "Cannot write Actions secrets for $repo" >&2; exit 1
             fi
           done < <(jq -r --arg current "$GITHUB_REPOSITORY" '.cfo.shared_login_repos // [$current] | .[]' "$RUNNER_TEMP/prism.json")
-      - uses: actions/checkout@v4
-        if: ${{ !inputs.preflight_only }}
-        with:
-          repository: Bhavya031/Prisme
-          ref: ${{ inputs.prisme_ref }}
-          path: prism
-          token: ${{ secrets.PRISME_READ_TOKEN || github.token }}
-          persist-credentials: false
       - uses: actions/setup-python@v5
         if: ${{ !inputs.preflight_only }}
         with:
@@ -84,7 +93,6 @@ jobs:
           [[ "$RUN_ID" =~ ^[0-9]+$ && "$ISSUE_NUMBER" =~ ^[0-9]+$ ]] || { echo 'run_id and issue_number must be numeric' >&2; exit 1; }
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "prism-estimate-$ISSUE_NUMBER" --dir "$RUNNER_TEMP/prism-estimate"
           test -s "$RUNNER_TEMP/prism-estimate/estimate.json"
-          gh api -H 'Accept: application/vnd.github.raw' "repos/$GITHUB_REPOSITORY/contents/.github/prism.json" > "$RUNNER_TEMP/prism.json"
       - name: Allocate in the synthetic CFO.ai tables and read back
         id: allocation
         if: ${{ !inputs.preflight_only }}
