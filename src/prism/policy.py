@@ -75,13 +75,16 @@ def recommend(data: dict, task: str, complexity: str, risk: str, max_cost_usd: f
     }
     if task != "file-finding":
         return policy | {"status": "needs_evaluation", "model": None,
-                         "reason": "No coding-task accuracy results exist for these models"}
+                         "reason": "No coding-task accuracy results exist for these models",
+                         "solve_cost": "Not covered here; `prism solve-estimate` estimates what solving an issue might cost"}
 
     run = cost.observed(data)
     cases = run["cases"]
     if run["kind"] != "benchmark" or not cases or not run["summary"]:
         raise ValueError("Need a benchmark result with graded cases")
     policy["evidence_source"] = {"run_id": run["run_id"], "stage": run["stage"], "cost_type": results.COST_TYPE}
+    policy["cost_scope"] = results.COST_SCOPE
+    policy["cost_scope_note"] = results.COST_SCOPE_NOTE
     candidates = []
     for provider, model in run["models"].items():
         summary = run["summary"][provider]

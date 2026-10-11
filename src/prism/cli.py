@@ -34,14 +34,15 @@ def parser() -> argparse.ArgumentParser:
                            help="stage name for the runs.json export (default: run-<run id>)")
     commands.add_parser("dry-run").add_argument("--manifest", type=Path, default=MANIFEST)
 
-    cost = commands.add_parser("cost", help="estimated USD per model from a saved run or a predict JSON output")
+    cost = commands.add_parser("cost", help="estimated file-discovery USD per model from a saved run or a predict JSON "
+                                            "output; not the cost of solving an issue (see solve-estimate)")
     cost.add_argument("--results", type=Path, required=True,
                       help="benchmark run directory, its result.json, or `prism predict --format json` output")
     cost.add_argument("--new-cases", type=int, default=10)
     cost.add_argument("--format", choices=("json", "markdown"), default="json")
     cost.add_argument("--catalog", type=Path, default=None, help="saved price catalog JSON instead of fetching it")
 
-    policy = commands.add_parser("policy", help="recommend a tested model and budget from a saved benchmark run")
+    policy = commands.add_parser("policy", help="recommend a tested file-discovery model and budget from a saved benchmark run")
     policy.add_argument("--results", type=Path, required=True, help="benchmark run directory or its result.json")
     policy.add_argument("--task", choices=("file-finding", "coding"), required=True)
     policy.add_argument("--complexity", choices=("simple", "complex"), required=True)
@@ -57,6 +58,56 @@ def parser() -> argparse.ArgumentParser:
     policy.add_argument("--pr-url", help="target PR that must not appear in --context-file")
     policy.add_argument("--context-file", type=Path)
     policy.add_argument("--retrieval-file", type=Path)
+
+    solve = commands.add_parser(
+        "solve-estimate", help="estimate the tokens and USD a coding worker might spend solving an issue")
+    issue = solve.add_mutually_exclusive_group(required=True)
+    issue.add_argument("--issue-file", type=Path, help="text file holding the issue")
+    issue.add_argument("--issue-url", help="GitHub issue URL; its title and body are fetched")
+    issue.add_argument("--swebench-instance", type=Path,
+                       help="SWE-bench instance JSON; only its problem statement, repo and base commit reach the estimator")
+    selection = solve.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--prediction", type=Path, help="`prism predict --format json` output: predicted files and discovery cost")
+    selection.add_argument("--files", nargs="+", help="repository paths to measure instead of a prediction")
+    solve.add_argument("--provider", choices=("claude", "openai"), help="which provider's prediction to use")
+    solve.add_argument("--discovery-cost-usd", type=float, default=None, help="discovery cost when --files is used")
+    solve.add_argument("--commit", help="commit the files are read at (full SHA unless --checkout is given)")
+    solve.add_argument("--checkout", type=Path, help="local git checkout to read the files from")
+    solve.add_argument("--github-repo", help="owner/name to read the files from through the GitHub API")
+    solve.add_argument("--worker-model", required=True, help="model the coding worker would use; there is no default")
+    solve.add_argument("--pricing", type=Path,
+                       help="JSON with model, uncached_input_per_million, cached_input_per_million, output_per_million")
+    solve.add_argument("--catalog", type=Path, help="saved price catalog JSON to look the worker model up in")
+    solve.add_argument("--mode", choices=("heuristic", "model-assisted"), default="heuristic")
+    solve.add_argument("--assumptions", type=Path, help="JSON overriding the low/central/high assumptions")
+    solve.add_argument("--glance", help="path to the Glance binary (default: PRISM_GLANCE, then `glance` on PATH)")
+    solve.add_argument("--encoding", choices=("o200k_base", "cl100k_base"), default="o200k_base")
+    solve.add_argument("--planner-provider", choices=("claude", "openai"), default="claude")
+    solve.add_argument("--planner-max-input-tokens", type=int, default=15_000)
+    solve.add_argument("--planner-max-output-tokens", type=int, default=1500)
+    solve.add_argument("--planner-max-cost-usd", type=float, default=0.05)
+    solve.add_argument("--save", type=Path, help="also save this as the pre-run estimate; never overwrites")
+    solve.add_argument("--task-id", help="task name stored with --save (default: the SWE-bench instance id)")
+
+    record = commands.add_parser("solve-record", help="record a coding-worker run against an estimate saved before it")
+    record.add_argument("--estimate", type=Path, required=True, help="file written by solve-estimate --save")
+    record.add_argument("--started-at", required=True, help="when the worker run started, ISO 8601 with offset")
+    record.add_argument("--run-status", choices=("completed", "capped", "interrupted", "failed"), required=True)
+    record.add_argument("--verified-outcome", choices=("resolved", "unresolved", "unverified"), required=True)
+    record.add_argument("--worker-model", required=True)
+    record.add_argument("--uncached-input", type=int, required=True)
+    record.add_argument("--cached-input", type=int, default=0)
+    record.add_argument("--cache-write", type=int, default=0)
+    record.add_argument("--output", type=int, required=True, help="output tokens including reasoning")
+    record.add_argument("--billed-usd", type=float, default=None, help="amount the provider billed, if known")
+    record.add_argument("--usage-source", default="unspecified", help="where the token counts came from")
+    record.add_argument("--notes")
+    record.add_argument("--out", type=Path, help="write the record here; never overwrites")
+    record.add_argument("--glance-records", type=Path, help="also append the run to this Glance records JSONL")
+    record.add_argument("--glance", help="path to the Glance binary, for --glance-records")
+
+    compare = commands.add_parser("solve-compare", help="counts of estimates against recorded worker runs")
+    compare.add_argument("records", type=Path, nargs="+")
     return command_parser
 
 
@@ -78,6 +129,7 @@ def _print_predictions(predictions, output_format, trace_id=None, failed=None):
             data[provider] = {"provider": provider, "status": "failed", "error": results.error_details(error), **spent}
         for provider, prediction in data.items():
             prediction.update(model=models._model(provider), cost_type=results.COST_TYPE, cost_note=results.COST_NOTE,
+                              cost_scope=results.COST_SCOPE, cost_scope_note=results.COST_SCOPE_NOTE,
                               neatlogs_trace_id=trace_id)
         print(json.dumps(data, indent=2, sort_keys=True))
         return
@@ -89,7 +141,7 @@ def _print_predictions(predictions, output_format, trace_id=None, failed=None):
                 for path in prediction["by_category"].get(category, []):
                     print(f"- `{path}`")
             print(f"Model calls: {prediction['model_calls']}")
-            print(f"Estimated cost: ${prediction['estimated_cost_usd']:.8f}")
+            print(f"Estimated file-discovery cost: ${prediction['estimated_cost_usd']:.8f}")
             if (prediction.get("budget") or {}).get("over_max_cost"):
                 print(f"Reached the ${prediction['budget']['max_cost_usd']:g} cost limit; one call can overshoot it.")
             if trace_id:
@@ -147,11 +199,104 @@ def _report(args) -> None:
     print(json.dumps(result, indent=2))
 
 
+def _solve_estimate(args) -> dict:
+    from . import glance, github_context, solve, swebench, validation
+
+    instance = _read_json(args.swebench_instance) if args.swebench_instance else None
+    commit, github_repo = args.commit, args.github_repo
+    if instance is not None:
+        # Only these four fields go any further; the hidden ones are used by the leak check alone.
+        task = swebench.visible_task(instance)
+        issue_text, issue_source = task["problem_statement"], f"SWE-bench {task['instance_id']} problem_statement"
+        commit = commit or task["base_commit"]
+        if args.checkout is None:
+            github_repo = github_repo or task["repo"]
+    elif args.issue_file:
+        issue_text, issue_source = args.issue_file.read_text(), f"file {args.issue_file}"
+    else:
+        match = github_context.ISSUE_URL.fullmatch(args.issue_url)
+        if not match:
+            raise ValueError("Expected a GitHub issue URL")
+        issue = github_context.api_v2(f"repos/{match[1]}/{match[2]}/issues/{match[3]}")
+        issue_text, issue_source = f"{issue['title']}\n\n{issue.get('body') or ''}", f"{args.issue_url} title and body"
+    if not issue_text.strip():
+        raise ValueError("The issue text is empty")
+    if not commit:
+        raise ValueError("--commit is required: the context is measured at one recorded commit")
+    prediction = _read_json(args.prediction) if args.prediction else None
+    if prediction is not None:
+        paths, provider = solve.predicted_files(prediction, args.provider)
+        selection = f"{provider} prediction in {args.prediction}"
+        discovery = solve.discovery_cost(prediction)
+    else:
+        paths, selection = args.files, "--files"
+        discovery = solve.discovery_cost(manual_usd=args.discovery_cost_usd)
+    assumed = solve.assumptions(_read_json(args.assumptions) if args.assumptions else None)
+    per_token, pricing = solve.worker_prices(args.worker_model, _read_json(args.pricing) if args.pricing else None,
+                                             _read_json(args.catalog) if args.catalog else None)
+    binary = glance.locate(args.glance)
+    commit = glance.resolve_commit(commit, args.checkout)
+    files = glance.read_files(paths, commit, checkout=args.checkout, github_repo=github_repo)
+    if instance is not None:
+        # Before any model call, so hidden material cannot reach the planner.
+        swebench.leak_check(instance, commit=commit, files=files, texts={"issue_text": issue_text})
+    print(f"measuring {len(files)} file(s) at {commit[:12]} with {binary}", file=sys.stderr)
+    estimate = solve.estimate(
+        issue_text=issue_text, files=files, commit=commit, worker_model=args.worker_model, per_token=per_token,
+        pricing=pricing, measure=lambda text: glance.measure(text, glance=binary, encoding=args.encoding),
+        assumed=assumed, discovery=discovery, mode=args.mode.replace("-", "_"),
+        planner={"provider": args.planner_provider, "max_input_tokens": args.planner_max_input_tokens,
+                 "max_output_tokens": args.planner_max_output_tokens, "max_cost_usd": args.planner_max_cost_usd},
+        sources={"issue_source": issue_source, "file_selection": selection, "files": list(files),
+                 "content_source": f"git objects in {args.checkout}" if args.checkout else f"GitHub API, {github_repo}"})
+    if instance is not None:
+        estimate["assumptions"]["leak_check"] = swebench.leak_check(
+            instance, commit=commit, files=files, texts={"issue_text": issue_text, "estimate": json.dumps(estimate)})
+    if args.save:
+        task_id = args.task_id or (instance or {}).get("instance_id")
+        if not task_id:
+            raise ValueError("--save needs --task-id")
+        saved = validation.save_estimate(estimate, args.save, task_id)
+        print(f"saved pre-run estimate {args.save} at {saved['saved_at']}", file=sys.stderr)
+    return estimate
+
+
+def _solve(args) -> None:
+    """`prism solve-estimate`, `solve-record` and `solve-compare`: JSON on stdout, problems on stderr."""
+    from . import glance, validation
+
+    try:
+        if args.command == "solve-estimate":
+            result = _solve_estimate(args)
+        elif args.command == "solve-compare":
+            result = validation.compare([_read_json(path) for path in args.records])
+        else:
+            if args.out and args.out.exists():
+                raise ValueError(f"{args.out} already exists; run records are never overwritten")
+            result = validation.record_run(
+                _read_json(args.estimate), started_at=args.started_at, run_status=args.run_status,
+                verified_outcome=args.verified_outcome, worker_model=args.worker_model,
+                uncached_input=args.uncached_input, cached_input=args.cached_input, cache_write=args.cache_write,
+                output=args.output, billed_usd=args.billed_usd, usage_source=args.usage_source, notes=args.notes)
+            if args.glance_records:
+                validation.mirror_to_glance(result, glance.locate(args.glance), args.glance_records)
+            if args.out:
+                from . import results
+
+                results.write_json(args.out, result)
+    except (OSError, ValueError, KeyError, RuntimeError) as error:
+        raise SystemExit(f"prism {args.command}: {type(error).__name__}: {error}") from None
+    print(json.dumps(result, indent=2))
+
+
 def main(argv=None) -> None:
     args = parser().parse_args(argv)
     _load_env()
     if args.command in ("cost", "policy"):
         _report(args)
+        return
+    if args.command.startswith("solve-"):
+        _solve(args)
         return
     if args.command == "predict":
         from . import entire, tracing

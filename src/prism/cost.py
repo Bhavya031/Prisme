@@ -1,4 +1,4 @@
-"""Estimate model costs from the token counts of completed Prism runs."""
+"""Estimate file-discovery costs from the token counts of completed Prism runs. Solve cost lives in solve.py."""
 
 import hashlib
 import json
@@ -152,6 +152,8 @@ def build_report(data: dict, catalog: dict, catalog_sha: str | None, new_cases: 
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "cost_type": results.COST_TYPE,
         "cost_note": results.COST_NOTE,
+        "cost_scope": results.COST_SCOPE,
+        "cost_scope_note": results.COST_SCOPE_NOTE,
         "source": {key: run[key] for key in ("kind", "run_id", "stage")},
         "catalog": {"url": CATALOG_URL, "sha256": catalog_sha, "note": "Community catalog; verify final rates with provider billing"},
         "observed_cases": len(cases), "new_cases_forecast": new_cases,
@@ -184,9 +186,10 @@ def build_report(data: dict, catalog: dict, catalog_sha: str | None, new_cases: 
 def markdown_table(report: dict) -> str:
     cases = report["observed_cases"]
     rows = [
-        "# Issue-to-files cost forecast", "",
+        "# File-discovery cost forecast", "",
         f"{report['new_cases_forecast']} new cases; prices in USD per million tokens. Costs are estimates that reuse "
-        f"the {cases} observed case{'s' if cases != 1 else ''} and are not quality predictions.", "",
+        f"the {cases} observed case{'s' if cases != 1 else ''} and are not quality predictions. "
+        "They cover finding files only, not solving the issue.", "",
         "## Token inputs from completed cases", "",
         "| Observed provider | Uncached input | Cached input | Cache write | Output |",
         "|---|---:|---:|---:|---:|",
@@ -194,7 +197,7 @@ def markdown_table(report: dict) -> str:
     for provider, profile in report["token_profiles"].items():
         rows.append(f"| {provider} | {profile['uncached_input']:,} | {profile['cached_input']:,} | {profile['cache_write']:,} | {profile['output']:,} |")
     rows += ["", "## Quick comparison", "",
-             f"| Model | Basis | Input $/M | Output $/M | Est. {report['new_cases_forecast']}-case cost |",
+             f"| Model | Basis | Input $/M | Output $/M | Est. {report['new_cases_forecast']}-case discovery cost |",
              "|---|---|---:|---:|---:|"]
     by_name = {model["model"]: model for model in report["models"]}
     for name in dict.fromkeys((*report["current_model_pair"]["models"], *QUICK_MODELS)):
@@ -203,7 +206,7 @@ def markdown_table(report: dict) -> str:
             rates = model["usd_per_million_tokens"]
             rows.append(f"| {name} | {model['basis']} | ${rates['uncached_input']:g} | ${rates['output']:g} | ${model['estimated_usd_new_cases']:.4f} |")
     rows += ["", "## Full catalog comparison", "",
-             "| Provider | Model | Input | Cached input | Cache write | Output | Est. cost |",
+             "| Provider | Model | Input | Cached input | Cache write | Output | Est. discovery cost |",
              "|---|---|---:|---:|---:|---:|---:|"]
     for model in report["models"]:
         rates = model["usd_per_million_tokens"]

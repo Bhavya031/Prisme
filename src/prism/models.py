@@ -86,7 +86,7 @@ class Truncated(BilledError):
 
 
 async def call(provider: str, stage: str, prompt: str, schema: dict,
-               max_output_tokens: int = MAX_TOKENS) -> tuple[dict, Usage]:
+               max_output_tokens: int = MAX_TOKENS, system: str = SYSTEM) -> tuple[dict, Usage]:
     """Call one provider with strict JSON output and return parsed data plus usage."""
     client = await _client(provider)
     import neatlogs
@@ -95,7 +95,7 @@ async def call(provider: str, stage: str, prompt: str, schema: dict,
             response = await client.messages.create(
                 model=_model(provider), max_tokens=max_output_tokens,
                 output_config={"effort": EFFORT, "format": {"type": "json_schema", "schema": schema}},
-                system=SYSTEM, messages=[{"role": "user", "content": prompt}],
+                system=system, messages=[{"role": "user", "content": prompt}],
             )
             usage = _usage(input=response.usage.input_tokens,
                            cached_input=getattr(response.usage, "cache_read_input_tokens", 0),
@@ -107,7 +107,7 @@ async def call(provider: str, stage: str, prompt: str, schema: dict,
         else:
             response = await client.responses.create(
                 model=_model(provider), reasoning={"effort": EFFORT}, max_output_tokens=max_output_tokens,
-                instructions=SYSTEM, input=prompt,
+                instructions=system, input=prompt,
                 text={"format": {"type": "json_schema", "name": stage, "schema": schema, "strict": True}},
             )
             if response.status != "completed" and getattr(response, "usage", None) is None:
