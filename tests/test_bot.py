@@ -94,6 +94,18 @@ class BotTests(unittest.TestCase):
         self.assertIn("spent before stopping", bot.render(None, None, "predict failed").lower())
         self.assertIn("call in flight may still be billed", bot.render(None, None, "predict failed"))
 
+    def test_partial_failure_labels_known_subtotal_and_unknown_additional_spend(self):
+        prediction = json.loads((FIXTURES / "predict-httpx-2788.json").read_text())
+        prediction["openai"] = {"status": "failed", "error": {"message": "request timed out"}}
+        failed = bot.render(prediction, None)
+        self.assertIn("known subtotal $0.0181", failed)
+        self.assertIn("additional spend unknown for openai", failed)
+        estimate = json.loads((FIXTURES / "estimate-sympy-20590.json").read_text())["estimate"]
+        estimate["discovery_actual_cost"] = bot.solve.discovery_cost(prediction)
+        completed = bot.render(prediction, estimate)
+        self.assertIn("known subtotal $0.0181", completed)
+        self.assertIn("additional spend unknown for openai", completed)
+
     def test_cli_renders_saved_json_and_gates_without_network(self):
         output = io.StringIO()
         with redirect_stdout(output):

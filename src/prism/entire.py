@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+from pathlib import Path
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -107,3 +108,37 @@ def search_many(terms: list[str], repo: str) -> dict[str, list[Hit]]:
     with ThreadPoolExecutor(max_workers=len(unique_terms) or 1) as executor:
         hits = executor.map(lambda term: search(term, repo), unique_terms)
         return dict(zip(unique_terms, hits))
+
+
+def check_checkout(checkout: Path, commit: str) -> None:
+    """Refuse a pinned prediction before any model call if its source commit is unavailable."""
+    try:
+        result = subprocess.run(["git", "-C", str(checkout), "cat-file", "-e", f"{commit}^{{commit}}"],
+                                capture_output=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        result = None
+    if result is None or result.returncode:
+        raise ValueError(f"Pinned search commit {commit} is unavailable in {checkout}")
+
+
+def search_many_at_commit(terms: list[str], checkout: Path, commit: str) -> dict[str, list[Hit]]:
+    """Search only Git objects at the pinned commit; the current Entire index may be newer."""
+    grouped = {}
+    for term in dict.fromkeys(terms):
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(checkout), "grep", "-n", "-z", "-i", "-I", "-F", "-m", "2", "-e", term,
+                 commit, "--"], capture_output=True, text=True, timeout=45,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            raise RuntimeError("Pinned source search failed") from None
+        if result.returncode not in (0, 1):
+            raise RuntimeError("Pinned source search failed")
+        hits = []
+        for row in result.stdout.splitlines():
+            path, line, value = row.split("\0", 2)
+            hits.append(Hit(path=path.removeprefix(f"{commit}:"), line=int(line), text=value))
+            if len(hits) == 30:
+                break
+        grouped[term] = hits
+    return grouped

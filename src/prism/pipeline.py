@@ -88,7 +88,8 @@ def check_budget(provider: str, *, max_cost_usd: float | None = None, max_output
 
 
 def _grouped(terms: list[str], ctx: Context, plan: dict) -> dict:
-    hits_by_term = entire.search_many(terms, ctx.entire_repo)
+    hits_by_term = (entire.search_many_at_commit(terms, ctx.search_checkout, ctx.search_commit)
+                    if ctx.search_commit else entire.search_many(terms, ctx.entire_repo))
     files: dict[str, dict] = defaultdict(lambda: {"hit_count": 0, "terms": set(), "lines": []})
     for term in terms:
         for hit in hits_by_term.get(term, []):
@@ -149,6 +150,10 @@ async def predict(ctx: Context, provider: str, *, max_cost_usd: float | None = N
                   max_output_tokens: int = models.MAX_TOKENS, max_extra: int = 1,
                   timeout_seconds: float | None = None) -> Prediction:
     """Predict files for one provider, optionally bounded by cost, output, retrieval and time budgets."""
+    if ctx.search_commit:
+        if ctx.search_checkout is None:
+            raise ValueError("Pinned prediction requires a checkout for commit-scoped search")
+        entire.check_checkout(ctx.search_checkout, ctx.search_commit)
     check_budget(provider, max_cost_usd=max_cost_usd, max_output_tokens=max_output_tokens,
                  max_extra=max_extra, timeout_seconds=timeout_seconds)
     limits = {"max_cost_usd": max_cost_usd, "max_output_tokens": max_output_tokens,

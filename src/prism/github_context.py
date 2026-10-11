@@ -264,6 +264,7 @@ def build_context(
     entire_repo: str,
     pr_url: str | None = None,
     pre_merge_sha: str | None = None,
+    search_checkout: Path | None = None,
 ) -> Context:
     issue_match = ISSUE_URL.fullmatch(issue_url)
     if not issue_match:
@@ -279,8 +280,10 @@ def build_context(
         if pr_url is None or paired:
             _prefetch(pool, fetch, root, issue_number, owner, repo,
                       int(pr_match.group(3)) if paired else None, entire_repo)
-        return _collect(fetch, root, issue_number, owner, repo, pr_url is not None, pr_match if paired else None,
-                        pre_merge_sha, entire_repo)
+        ctx = _collect(fetch, root, issue_number, owner, repo, pr_url is not None, pr_match if paired else None,
+                       pre_merge_sha, entire_repo)
+        ctx.search_commit, ctx.search_checkout = pre_merge_sha, search_checkout
+        return ctx
     finally:
         pool.shutdown(wait=True, cancel_futures=True)
 

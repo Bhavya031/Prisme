@@ -1,16 +1,45 @@
+import asyncio
 import io
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from prism import github_context, pipeline
+from prism import entire, github_context, models, pipeline
 from prism.types import Bundle, Context
 
 
 class ContextTests(unittest.TestCase):
+    def test_pinned_search_uses_old_git_objects_even_when_head_has_the_fix(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "src").mkdir()
+            subprocess.run(["git", "-C", folder, "init", "-q"], check=True)
+            path = root / "src/a.py"
+            path.write_text("shared safe source\n")
+            subprocess.run(["git", "-C", folder, "add", "src/a.py"], check=True)
+            subprocess.run(["git", "-C", folder, "-c", "user.name=Test", "-c", "user.email=test@example.test",
+                            "commit", "-qm", "pre-merge"], check=True)
+            before = subprocess.check_output(["git", "-C", folder, "rev-parse", "HEAD"], text=True).strip()
+            path.write_text("shared gold fix\n")
+            subprocess.run(["git", "-C", folder, "add", "src/a.py"], check=True)
+            subprocess.run(["git", "-C", folder, "-c", "user.name=Test", "-c", "user.email=test@example.test",
+                            "commit", "-qm", "later fix"], check=True)
+            ctx = Context(Bundle({}, [], [], {}), {"src/a.py"}, set(), None, 42, "gh/o/r",
+                          search_commit=before, search_checkout=root)
+            with mock.patch.object(entire, "search_many", side_effect=AssertionError("unscoped search")):
+                grouped = pipeline._grouped(["shared", "gold"], ctx, {"expected_file_kinds": []})
+            self.assertEqual(grouped["files"][0]["lines"], ["1: shared safe source"])
+            self.assertNotIn("gold", json.dumps(grouped["files"]))
+            ctx.search_checkout = None
+            with mock.patch.object(models, "call") as call, \
+                 self.assertRaisesRegex(ValueError, "requires a checkout"):
+                asyncio.run(pipeline.predict(ctx, "claude"))
+            call.assert_not_called()
+
     def test_target_mentions_are_removed_without_matching_longer_numbers(self):
         target = 6589
         for value in ("#6589", "PR #6589", "pull request 6589", "/pull/6589"):

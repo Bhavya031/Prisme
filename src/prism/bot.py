@@ -88,6 +88,13 @@ def _levels(values: dict, show) -> str:
     return " / ".join(show(values[name]) for name in solve.LEVELS)
 
 
+def _unpriced_failures(prediction: dict | None) -> list[str]:
+    return [provider for provider in results.PROVIDERS
+            if isinstance((prediction or {}).get(provider), dict)
+            and prediction[provider].get("status") == "failed"
+            and "estimated_cost_usd" not in prediction[provider]]
+
+
 def _spent(prediction: dict | None) -> str:
     if not prediction:
         return "unknown; no token usage was recorded, and a call in flight may still be billed"
@@ -96,7 +103,11 @@ def _spent(prediction: dict | None) -> str:
     except (ValueError, TypeError, AttributeError):
         return "unknown; no token usage was recorded, and a call in flight may still be billed"
     calls = sum(run["model_calls"] or 0 for run in discovery["runs"].values())
-    return f"{_usd(discovery['usd'])} on file discovery ({calls} model call(s)); estimated from token counts at list prices"
+    unknown = _unpriced_failures(prediction)
+    subtotal = "known subtotal " if unknown else ""
+    extra = f"; additional spend unknown for {', '.join(unknown)}" if unknown else ""
+    return (f"{subtotal}{_usd(discovery['usd'])} on file discovery ({calls} model call(s)); "
+            f"estimated from token counts at list prices{extra}")
 
 
 def _caps(prediction: dict | None) -> list[str]:
@@ -134,7 +145,11 @@ def render(prediction: dict | None = None, estimate: dict | None = None, error: 
     if excluded := measurement.get("excluded_paths"):
         files += "; not measured: " + ", ".join(_code(item["path"]) for item in excluded)
     calls = sum(run.get("model_calls") or 0 for run in discovery["runs"].values())
-    spent = _usd(discovery["usd"]) + (f" ({calls} model call(s))" if discovery["runs"] else "")
+    unknown = _unpriced_failures(prediction)
+    spent = ("known subtotal " if unknown else "") + _usd(discovery["usd"])
+    spent += (f" ({calls} model call(s))" if discovery["runs"] else "")
+    if unknown:
+        spent += f"; additional spend unknown for {', '.join(unknown)}"
     spent += "".join(f"; {note}" for note in _caps(prediction))
     spread = " / ".join(solve.LEVELS)
     rows = [

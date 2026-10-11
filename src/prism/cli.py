@@ -20,6 +20,7 @@ def parser() -> argparse.ArgumentParser:
     predict.add_argument("--repo", required=True)
     predict.add_argument("--pr-url", help="target PR to exclude from a pre-merge benchmark prediction")
     predict.add_argument("--pre-merge-sha", help="pre-merge base commit; requires --pr-url")
+    predict.add_argument("--checkout", type=Path, help="git repository containing the pinned search commit")
     predict.add_argument("--provider", choices=("claude", "openai", "both"), default="both")
     predict.add_argument("--format", choices=("text", "json", "markdown"))
     predict.add_argument("--max-cost-usd", type=float, default=None,
@@ -363,6 +364,10 @@ def main(argv=None) -> None:
         providers = ("claude", "openai") if args.provider == "both" else (args.provider,)
         if args.pre_merge_sha and not args.pr_url:
             raise SystemExit("prism predict: --pre-merge-sha requires --pr-url")
+        if args.pre_merge_sha and not args.checkout:
+            raise SystemExit("prism predict: --pre-merge-sha requires --checkout for commit-scoped search")
+        if args.checkout and not args.pre_merge_sha:
+            raise SystemExit("prism predict: --checkout requires --pre-merge-sha")
         budget = {"max_cost_usd": args.max_cost_usd, "max_extra": args.max_extra_rounds,
                   "timeout_seconds": args.timeout_seconds}
         if args.max_output_tokens is not None:
@@ -382,7 +387,8 @@ def main(argv=None) -> None:
             with tracing.workflow("issue-to-files") as span:
                 with tracing.step("collect-context", "TOOL"):
                     ctx = build_context(args.issue_url, entire_repo=args.repo,
-                                        pr_url=args.pr_url, pre_merge_sha=args.pre_merge_sha)
+                                        pr_url=args.pr_url, pre_merge_sha=args.pre_merge_sha,
+                                        search_checkout=args.checkout)
                 outcomes = asyncio.run(_predict(ctx, providers, budget))
             predictions, failed = [], {}
             for provider, outcome in zip(providers, outcomes):
