@@ -21,6 +21,15 @@ class CFOAllocation(unittest.TestCase):
         self.assertEqual(repeat, first)
         self.assertIsNone(second)
 
+    def test_reused_id_with_changed_task_identity_blocks(self):
+        _, row = decide(REQUEST, BUDGET, POLICY, [])
+        for key, changed in (("issue_url", "https://github.com/Bhavya031/k-2/issues/41"),
+                             ("pinned_commit", "another-commit"), ("model", "another-model")):
+            with self.subTest(key=key):
+                result, reservation = decide(REQUEST | {key: changed}, BUDGET, POLICY, [row])
+                self.assertEqual(result["decision"], "blocked")
+                self.assertIsNone(reservation)
+
     def test_missing_budget_or_policy_blocks(self):
         for budget, policy in ((None, POLICY), (BUDGET, None)):
             result, row = decide(REQUEST, budget, policy, [])

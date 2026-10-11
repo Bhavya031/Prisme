@@ -16,7 +16,8 @@ def decide(request: dict, budget: dict | None, policy: dict | None, allocations:
         return _blocked("duplicate request ID records"), None
     if matches:
         row = matches[0]
-        if row["repository"] != request["repository"] or row["estimated_usd"] != request["estimated_usd"]:
+        identity = ("repository", "issue_url", "pinned_commit", "model", "estimated_usd")
+        if any(key not in row or key not in request or row[key] != request[key] for key in identity):
             return _blocked("request ID already belongs to different inputs"), None
         return {key: row[key] for key in ("decision", "allocation_id", "allocated_usd_cap", "available_balance", "reason")}, None
     if not budget or not policy:
