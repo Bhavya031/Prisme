@@ -58,9 +58,11 @@ jobs:
       GLANCE_COMMIT: 3465201a46801c96fe57958306e36eb3b3132679
     steps:
       - uses: actions/setup-python@v5
+        id: setup_python
         with:
           python-version: "3.12"
       - uses: actions/setup-go@v5
+        id: setup_go
         with:
           go-version: stable
       - name: Install pinned Prism
@@ -160,8 +162,16 @@ jobs:
             --errors predict.err estimate.err --run-url "$RUN_URL" > comment.md || status=$?
           exit "$status"
       - name: Post or update the one Prism comment
-        if: always() && ((steps.gate.outcome == 'success' && steps.gate.outputs.note == '') || steps.install.outcome == 'failure')
+        if: >-
+          always() && ((steps.gate.outcome == 'success' && steps.gate.outputs.note == '') ||
+          steps.setup_python.outcome == 'failure' || steps.setup_go.outcome == 'failure' ||
+          steps.install.outcome == 'failure' || steps.source.outcome == 'failure')
         run: |
+          if [ "${{ steps.gate.outcome }}" != 'success' ]; then
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body "Prism setup failed before estimation. See the [workflow run]($RUN_URL)."
+            exit 0
+          fi
           if [ ! -s comment.md ] || grep -q '<!-- prism-loading -->' comment.md; then
             printf '%s\n' '<!-- prism-estimate -->' '### Prism estimate did not finish' '' \
               "**Stopped by:** setup failed before prediction. See the [workflow run]($RUN_URL)." > comment.md
