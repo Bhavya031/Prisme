@@ -94,7 +94,8 @@ class CFOActions(unittest.TestCase):
              patch.object(cfo_actions, "read_table", side_effect=reads), \
              patch.object(cfo_actions, "mcp", return_value={"capabilities": {}}) as call:
             result = cfo_actions.allocate(self.estimate, 38138900611, 41)
-        self.assertEqual((result["request_id"], result["issue_url"]), (request_id, issue_url))
+        self.assertEqual((result["request_id"], result["repository"], result["issue_url"]),
+                         (request_id, "Bhavya031/k-2", issue_url))
         self.assertEqual(call.call_count, 1)
 
     def test_secret_write_failure_does_not_rotate_refresh_token(self):

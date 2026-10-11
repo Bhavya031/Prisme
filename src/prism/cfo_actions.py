@@ -128,11 +128,13 @@ def allocate(estimate_path, run_id, issue_number=40):
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise RuntimeError("Saved estimate has no pinned commit")
     central = estimate["solve_token_estimate"]["central"]
-    request_id = f"SYNTHETIC/prism-ci-k2-issue{issue_number}-run{run_id}"
+    repository = "Bhavya031/k-2"
+    repo_id = repository.rsplit("/", 1)[-1].replace("-", "")
+    request_id = f"SYNTHETIC/prism-ci-{repo_id}-issue{issue_number}-run{run_id}"
     request = {
         "request_id": request_id,
-        "repository": "Bhavya031/k-2",
-        "issue_url": f"https://github.com/Bhavya031/k-2/issues/{issue_number}",
+        "repository": repository,
+        "issue_url": f"https://github.com/{repository}/issues/{issue_number}",
         "pinned_commit": commit,
         "model": estimate["worker_model"],
         "estimated_usd": estimate["end_to_end_cost_estimate"]["central"]["usd"],
