@@ -13,7 +13,7 @@ from pathlib import Path
 
 from . import cost, results, solve
 
-ESTIMATE_SCHEMA = "prism.solve-estimate/1"
+ESTIMATE_SCHEMA = "prism.solve-estimate/2"
 RECORD_SCHEMA = "prism.solve-run/1"
 RUN_STATUSES = ("completed", "capped", "interrupted", "failed")
 OUTCOMES = ("resolved", "unresolved", "unverified")
@@ -21,8 +21,10 @@ NO_ACCURACY_CLAIM = ("Counts over recorded runs only. One task, or file-discover
                      "estimator is accurate.")
 
 
-def _digest(estimate: dict) -> str:
-    return hashlib.sha256(json.dumps(estimate, sort_keys=True).encode()).hexdigest()
+def _digest(saved: dict) -> str:
+    """Covers the task and the save time as well as the estimate, so none of them can be changed afterwards."""
+    sealed = {key: saved[key] for key in ("task_id", "saved_at", "estimate")}
+    return hashlib.sha256(json.dumps(sealed, sort_keys=True).encode()).hexdigest()
 
 
 def _time(value: str) -> datetime:
@@ -41,8 +43,8 @@ def save_estimate(estimate: dict, path: Path, task_id: str) -> dict:
     if path.exists():
         raise ValueError(f"{path} already exists; a saved pre-run estimate is never overwritten")
     estimate = results.redact(estimate)
-    saved = {"schema": ESTIMATE_SCHEMA, "task_id": task_id, "saved_at": results.now(),
-             "estimate_sha256": _digest(estimate), "estimate": estimate}
+    saved = {"schema": ESTIMATE_SCHEMA, "task_id": task_id, "saved_at": results.now(), "estimate": estimate}
+    saved["estimate_sha256"] = _digest(saved)
     path.parent.mkdir(parents=True, exist_ok=True)
     results.write_json(path, saved)
     return saved
@@ -52,8 +54,11 @@ def record_run(saved: dict, *, started_at: str, run_status: str, verified_outcom
                uncached_input: int, cached_input: int, cache_write: int, output: int,
                billed_usd: float | None = None, usage_source: str = "unspecified", notes: str | None = None) -> dict:
     """Join one worker run's actual figures to the estimate saved before it."""
-    if saved.get("schema") != ESTIMATE_SCHEMA or _digest(saved["estimate"]) != saved.get("estimate_sha256"):
-        raise ValueError("Saved estimate is not a prism pre-run estimate or was changed after it was saved")
+    if saved.get("schema") != ESTIMATE_SCHEMA:
+        raise ValueError(f"Saved estimate has schema {saved.get('schema')!r}, not {ESTIMATE_SCHEMA!r}; "
+                         "save a new one with this version of `prism solve-estimate --save`")
+    if _digest(saved) != saved.get("estimate_sha256"):
+        raise ValueError("Saved estimate, its task or its save time was changed after it was saved")
     estimate = saved["estimate"]
     if run_status not in RUN_STATUSES or verified_outcome not in OUTCOMES:
         raise ValueError(f"run_status must be one of {RUN_STATUSES} and verified_outcome one of {OUTCOMES}")

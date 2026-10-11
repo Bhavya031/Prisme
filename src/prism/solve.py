@@ -98,6 +98,12 @@ def assumptions(overrides: dict | None = None) -> dict:
     adjustments = overrides.get("model_adjustments") or {}
     if unknown := set(adjustments) - set(DEFAULT_ADJUSTMENTS):
         raise ValueError(f"Unknown model adjustment: {', '.join(sorted(unknown))}")
+    for name, value in adjustments.items():
+        default = DEFAULT_ADJUSTMENTS[name]
+        numbers = list(value.values()) if isinstance(value, dict) else [value]
+        if (isinstance(value, dict) != isinstance(default, dict) or (isinstance(default, dict) and set(value) != set(default))
+                or any(isinstance(n, bool) or not isinstance(n, (int, float)) or not math.isfinite(n) or n < 0 for n in numbers)):
+            raise ValueError(f"model_adjustments.{name} must have the same shape as its default, with nonnegative numbers")
     merged["model_adjustments"].update(adjustments)
     fraction = overrides.get("cache_read_fraction")
     if fraction is not None and (isinstance(fraction, bool) or not isinstance(fraction, (int, float)) or not 0 <= fraction <= 1):
@@ -296,6 +302,9 @@ def plan(issue_text: str, files: dict, measure, *, provider: str = "claude", max
     except models.BilledError as error:
         spent = models.estimate_cost(provider, error.usage)
         raise RuntimeError(f"Planning call failed after spending an estimated ${spent:.6f}: {error}") from None
+    except Exception as error:
+        # Provider SDK errors (auth, rate limit, network) share no base class; report them like any other failure.
+        raise RuntimeError(f"Planning call failed: {type(error).__name__}: {error}") from None
     actual = {"usd": models.estimate_cost(provider, usage), "model_calls": 1, "provider": provider,
               "model": models._model(provider), "usage": asdict(usage),
               "cost_basis": "actual token usage of the planning call priced at list prices; not a billed amount"}

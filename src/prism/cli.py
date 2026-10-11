@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 import os
+import subprocess
 import sys
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
@@ -292,7 +293,7 @@ def _solve(args) -> None:
                 results.write_json(args.out, result)
             if args.glance_records:
                 validation.mirror_to_glance(result, glance.locate(args.glance), args.glance_records)
-    except (OSError, ValueError, KeyError, RuntimeError) as error:
+    except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as error:
         raise SystemExit(f"prism {args.command}: {type(error).__name__}: {error}") from None
     print(json.dumps(result, indent=2))
 

@@ -74,9 +74,11 @@ def _text(raw: bytes) -> str:
 def _read(path: str, commit: str, checkout, github_repo, fetch) -> str:
     if checkout is not None:
         # Reads the blob from the object store; the working tree is neither used nor changed.
-        result = subprocess.run(["git", "-C", str(checkout), "show", f"{commit}:{path}"], capture_output=True, timeout=60)
+        # `cat-file blob` fails on a directory, where `git show` would print a listing that looks like content.
+        result = subprocess.run(["git", "-C", str(checkout), "cat-file", "blob", f"{commit}:{path}"],
+                                capture_output=True, timeout=60)
         if result.returncode:
-            raise _Excluded("missing at the recorded commit")
+            raise _Excluded("not a file at the recorded commit")
         return _text(result.stdout)
     try:
         item = fetch(f"repos/{github_repo}/contents/{urllib.parse.quote(path)}?ref={commit}")
@@ -140,11 +142,10 @@ def measure(text: str, *, glance: str, encoding: str = "o200k_base", run=subproc
         raise GlanceError("glance count timed out measuring the context") from None
     if result.returncode:
         detail = (result.stderr or result.stdout or b"").decode(errors="replace").strip()[:500]
-        if "unknown command" in detail:
-            raise GlanceError(f"This Glance ({glance}) has no `count` command. Upgrade Glance "
-                              "(go install github.com/Bhavya031/Glance/cmd/glance@latest); Prism does not fall back to "
-                              "`glance estimate`, byte counts or file names.")
-        raise GlanceError(f"glance count failed: {detail or 'no output'}")
+        # Glance's wording for a missing subcommand is not relied on: every failure carries the upgrade hint.
+        raise GlanceError(f"glance count failed: {detail or 'no output'}. If this Glance ({glance}) predates the `count` "
+                          "command, upgrade it (go install github.com/Bhavya031/Glance/cmd/glance@latest); Prism does not "
+                          "fall back to `glance estimate`, byte counts or file names.")
     try:
         found = json.loads(result.stdout)
         schema, version, used, tokens, size, reported = (found[key] for key in (

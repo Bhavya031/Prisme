@@ -139,7 +139,10 @@ class ModeTests(unittest.TestCase):
         self.assertIn("Caller-supplied", build(assumed=assumed)["assumptions"]["cache"]["note"])
         for overrides, message in (({"central": {"turns": 3}}, "Unknown central assumption"), ({"median": {}}, "Unknown assumption group"),
                                    ({"low": {"worker_turns": 0}}, "at least 1"), ({"cache_read_fraction": 2}, "between 0 and 1"),
-                                   ({"high": {"retry_fraction": -1}}, "nonnegative")):
+                                   ({"high": {"retry_fraction": -1}}, "nonnegative"),
+                                   ({"model_adjustments": {"output_tokens_per_changed_line": "many"}}, "same shape as its default"),
+                                   ({"model_adjustments": {"retry_risk_retry_multiplier": {"low": 1}}}, "same shape as its default"),
+                                   ({"model_adjustments": {"max_changed_lines": {"low": 1}}}, "same shape as its default")):
             with self.assertRaisesRegex(ValueError, message):
                 solve.assumptions(overrides)
         with self.assertRaisesRegex(ValueError, "low <= central <= high"):
@@ -218,6 +221,8 @@ class ModeTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, r"failed after spending an estimated \$0\.003000"):
             solve.plan("issue", {"a.py": "x"}, fake_measure, call=billed)
+        with self.assertRaisesRegex(RuntimeError, "Planning call failed: ConnectionError: rate limited"):
+            solve.plan("issue", {"a.py": "x"}, fake_measure, call=mock.Mock(side_effect=ConnectionError("rate limited")))
         with self.assertRaisesRegex(ValueError, "invalid retry_risk"):
             solve.apply_assessment(solve.DEFAULT_LEVELS, ASSESSMENT | {"retry_risk": "certain"}, solve.DEFAULT_ADJUSTMENTS)
         # A wild line count from the model is capped rather than trusted.
@@ -348,11 +353,12 @@ class GlanceTests(unittest.TestCase):
             calls.append(command[1])
             return SimpleNamespace(returncode=1, stdout=b"", stderr=b'glance: unknown command "count"\n')
 
-        with self.assertRaisesRegex(glance.GlanceError, "has no `count` command. Upgrade Glance.*does not fall back"):
+        with self.assertRaisesRegex(glance.GlanceError, "unknown command.*predates the `count` command, upgrade.*does not fall back"):
             glance.measure("context", glance="/bin/glance", run=old_glance)
         self.assertEqual(calls, ["count"])
-        with self.assertRaisesRegex(glance.GlanceError, "glance count failed: glance: input must be UTF-8 text"):
-            self.run_measure(self.counted(), returncode=1, stderr=b"glance: input must be UTF-8 text")
+        # The upgrade hint does not depend on how Glance words the failure.
+        with self.assertRaisesRegex(glance.GlanceError, "glance count failed: glance: no such verb.*upgrade"):
+            self.run_measure(self.counted(), returncode=1, stderr=b"glance: no such verb")
         never = mock.Mock(side_effect=AssertionError("glance must not be called"))
         with self.assertRaisesRegex(glance.GlanceError, "over the 8388608-byte limit.*does not truncate"):
             glance.measure("x" * ((8 << 20) + 1), glance="/bin/glance", run=never)
@@ -383,9 +389,16 @@ class GlanceTests(unittest.TestCase):
             self.assertEqual(glance.read_files(["a.py"], first, checkout=folder), ({"a.py": "old = 1\n"}, []))
             # Missing and non-text paths are reported, each with its reason, and every file comes from the one commit.
             self.assertEqual(glance.read_files(["a.py", "missing.py", "blob.bin", "a.py"], third, checkout=folder),
-                             ({"a.py": "new = 2\n"}, [{"path": "missing.py", "reason": "missing at the recorded commit"},
+                             ({"a.py": "new = 2\n"}, [{"path": "missing.py", "reason": "not a file at the recorded commit"},
                                                       {"path": "blob.bin", "reason": "not UTF-8 text"}]))
-            with self.assertRaisesRegex(ValueError, "No selected file could be read.*missing.py: missing at the recorded commit"):
+            # A directory is not content: `git show` would have printed its listing.
+            Path(folder, "pkg").mkdir()
+            Path(folder, "pkg", "m.py").write_text("m = 1\n")
+            git("add", "pkg")
+            git("commit", "-q", "-m", "four")
+            self.assertEqual(glance.read_files(["pkg", "pkg/m.py"], git("rev-parse", "HEAD"), checkout=folder),
+                             ({"pkg/m.py": "m = 1\n"}, [{"path": "pkg", "reason": "not a file at the recorded commit"}]))
+            with self.assertRaisesRegex(ValueError, "No selected file could be read.*missing.py: not a file at the recorded commit"):
                 glance.read_files(["missing.py"], first, checkout=folder)
             with self.assertRaisesRegex(ValueError, "not found in checkout"):
                 glance.resolve_commit("f" * 40, folder)
@@ -460,6 +473,10 @@ class ValidationTests(unittest.TestCase):
                   "output": central["output"], "usage_source": "provider-usage"} | options
         return validation.record_run(json.loads(self.path.read_text()), **values)
 
+    def record_saved(self, saved):
+        return validation.record_run(saved, started_at="2026-10-11T10:05:00Z", run_status="completed", verified_outcome="resolved",
+                                     worker_model="worker-x", uncached_input=1, cached_input=0, cache_write=0, output=1)
+
     def test_estimate_is_saved_before_the_run_and_never_replaced(self):
         on_disk = json.loads(self.path.read_text())
         self.assertEqual((on_disk["schema"], on_disk["task_id"], on_disk["saved_at"]),
@@ -473,6 +490,13 @@ class ValidationTests(unittest.TestCase):
             self.record(started_at="2026-10-11T10:05:00")
         tampered = json.loads(self.path.read_text())
         tampered["estimate"]["solve_cost_estimate"]["high"]["usd"] = 999
+        for field, value in (("task_id", "another-task"), ("saved_at", "2020-01-01T00:00:00Z")):
+            with self.assertRaisesRegex(ValueError, "changed after it was saved"):
+                validation.record_run(json.loads(self.path.read_text()) | {field: value}, started_at="2026-10-11T10:05:00Z",
+                                      run_status="completed", verified_outcome="resolved", worker_model="worker-x",
+                                      uncached_input=1, cached_input=0, cache_write=0, output=1)
+        with self.assertRaisesRegex(ValueError, "schema 'prism.solve-estimate/1'.*save a new one"):
+            self.record_saved(json.loads(self.path.read_text()) | {"schema": "prism.solve-estimate/1"})
         with self.assertRaisesRegex(ValueError, "changed after it was saved"):
             validation.record_run(tampered, started_at="2026-10-11T10:05:00Z", run_status="completed", verified_outcome="resolved",
                                   worker_model="worker-x", uncached_input=1, cached_input=0, cache_write=0, output=1)
@@ -734,6 +758,11 @@ class CliTests(unittest.TestCase):
                 stdout, _, code = self.run_cli(*base, "--commit", COMMIT, "--worker-model", "claude-sonnet-5-5")
             self.assertEqual(stdout, "")
             self.assertRegex(str(code), "prism solve-estimate: GlanceError: Glance not found. Pass --glance")
+            with mock.patch.object(glance, "locate", return_value="/bin/glance"), \
+                 mock.patch.object(glance, "read_files", side_effect=subprocess.TimeoutExpired("git", 60)):
+                stdout, _, code = self.run_cli(*base, "--commit", COMMIT, "--worker-model", "claude-sonnet-5-5")
+            self.assertEqual(stdout, "")
+            self.assertIn("prism solve-estimate: TimeoutExpired", str(code))
             for extra, message in ((["--worker-model", "claude-sonnet-5-5"], "--commit is required"),
                                    (["--commit", COMMIT, "--worker-model", "nobody-knows"], "No price for worker model"),
                                    (["--commit", "main", "--worker-model", "claude-sonnet-5-5", "--glance", "/bin/sh"],
