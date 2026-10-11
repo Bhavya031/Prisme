@@ -78,6 +78,7 @@ class BotTests(unittest.TestCase):
         for expected in ("66,041", "349,705 / 1,739,279 / 12,188,460", "$0.7114 / $3.5698 / $24.9529",
                          "not counted", "claude-sonnet-5-5", "cffd4e0f", "unvalidated guesses"):
             self.assertIn(expected, rendered)
+        self.assertNotIn("Confidence", rendered)
         failure = bot.render(prediction, None, "Glance count failed")
         self.assertIn("$0.0181", failure)
         self.assertIn("Glance count failed", failure)

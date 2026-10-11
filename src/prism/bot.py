@@ -161,7 +161,6 @@ def render(prediction: dict | None = None, estimate: dict | None = None, error: 
         (f"End-to-end estimate ({spread})", _levels(estimate["end_to_end_cost_estimate"], lambda level: _usd(level["usd"]))),
         ("Worker model", _code(estimate["worker_model"])),
         ("Repository commit", _code(estimate["repository_commit"])),
-        ("Confidence", _code(estimate["confidence"])),
     ]
     body = ["### Prism solve-cost estimate", "", "| | |", "|---|---|",
             *(f"| {name} | {value} |" for name, value in rows), "",
