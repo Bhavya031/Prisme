@@ -163,7 +163,7 @@ class BotTests(unittest.TestCase):
         workflow = (Path(__file__).parents[1] / "examples/prism-estimate.yml").read_text()
         run = workflow.split("      - name: Run estimate\n", 1)[1]
         self.assertNotIn("PRISM_ENTIRE_TRANSPORT: http", workflow)
-        self.assertIn("go install github.com/entireio/cli/cmd/entire@v0.11.4", run)
+        self.assertIn("go install github.com/entireio/cli/cmd/entire@latest", run)
         self.assertLess(run.index('export PATH="$GOBIN:$PATH"'), run.index("from prism.entire import ensure_ready"))
         self.assertIn("&& python -c 'import neatlogs'", workflow)
         self.assertIn('NEATLOGS_API_KEY: ${{ secrets.NEATLOGS_API_KEY }}', run)

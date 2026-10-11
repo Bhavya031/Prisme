@@ -1,4 +1,4 @@
-"""Allocate one saved k-2 estimate in the isolated CFO.ai synthetic model."""
+"""Allocate one saved Prism estimate in the CFO.ai tables named by the repository's .github/prism.json."""
 
 import argparse
 import json
@@ -15,11 +15,8 @@ from prism.cfo_allocation import decide
 
 MCP = "https://api.cfo.ai/mcp"
 TOKEN = "https://complete-cottage-73.authkit.app/oauth2/token"
-ORG_ID = "102909"
-PAGE = "SYNTHETIC prism-test k-2"
-BUDGET_TABLE = "SYNTHETIC prism-test k-2 budget and policy"
-REQUEST_TABLE = "SYNTHETIC prism-test k-2 request allocations"
-PREFIX = "SYNTHETIC prism-test "
+CFO_KEYS = ("org_id", "scenario", "page", "budget_table", "request_table", "column_prefix")
+CFO = {}  # the "cfo" section of --config, loaded in main()
 REQUEST_COLUMNS = (
     "request repository", "issue URL", "pinned commit", "worker model",
     "predicted input tokens", "predicted uncached input tokens", "predicted cached input tokens",
@@ -28,7 +25,15 @@ REQUEST_COLUMNS = (
 )
 
 
+def github_repository():
+    repository = os.environ.get("GITHUB_REPOSITORY")
+    if not repository:
+        raise RuntimeError("GITHUB_REPOSITORY is not set; it names the repository whose budget and secrets are used")
+    return repository
+
+
 def refresh_access_token():
+    repository = github_repository()
     client_id = os.environ.get("CFO_OAUTH_CLIENT_ID")
     refresh_token = os.environ.get("CFO_OAUTH_REFRESH_TOKEN")
     writer = os.environ.get("CFO_SECRET_WRITE_TOKEN")
@@ -38,12 +43,12 @@ def refresh_access_token():
     env["GH_TOKEN"] = writer
     # Prove secret writes work before rotating the only stored refresh token.
     preflight = subprocess.run(
-        ["gh", "secret", "set", "CFO_SECRET_WRITE_TOKEN", "--repo", "Bhavya031/k-2"],
+        ["gh", "secret", "set", "CFO_SECRET_WRITE_TOKEN", "--repo", repository],
         input=writer, text=True, capture_output=True, env=env,
     )
     if preflight.returncode:
         detail = preflight.stderr.strip() if preflight.stderr else f"gh exit {preflight.returncode}"
-        raise RuntimeError(f"CFO secret-write token cannot update k-2 Actions secrets; OAuth refresh was not attempted: {detail}")
+        raise RuntimeError(f"CFO secret-write token cannot update {repository} Actions secrets; OAuth refresh was not attempted: {detail}")
     payload = urllib.parse.urlencode({
         "grant_type": "refresh_token", "client_id": client_id, "refresh_token": refresh_token,
     }).encode()
@@ -62,13 +67,13 @@ def refresh_access_token():
     # Refresh tokens rotate; persist the replacement before using the access token.
     for attempt in range(3):
         saved = subprocess.run(
-            ["gh", "secret", "set", "CFO_OAUTH_REFRESH_TOKEN", "--repo", "Bhavya031/k-2"],
+            ["gh", "secret", "set", "CFO_OAUTH_REFRESH_TOKEN", "--repo", repository],
             input=result["refresh_token"], text=True, capture_output=True, env=env,
         )
         if saved.returncode == 0:
             return result["access_token"]
     detail = saved.stderr.strip() if saved.stderr else f"gh exit {saved.returncode}"
-    raise RuntimeError(f"CFO refresh succeeded but the rotated credential could not be saved to k-2 Actions secrets; reauthorization may be required: {detail}")
+    raise RuntimeError(f"CFO refresh succeeded but the rotated credential could not be saved to {repository} Actions secrets; reauthorization may be required: {detail}")
 
 
 def mcp(access_token, method, params, request_id):
@@ -97,16 +102,16 @@ def mcp(access_token, method, params, request_id):
 
 def read_table(access_token, name, request_id):
     data = mcp(access_token, "tools/call", {"name": "inspect_table_blocks", "arguments": {
-        "org_id": ORG_ID, "read": {"target": name},
+        "org_id": CFO["org_id"], "read": {"target": name},
     }}, request_id).get("structuredContent", {})
     if (data.get("table", {}).get("display_name") != name
-            or data.get("page", {}).get("display_name") != PAGE
-            or data.get("scenario") != "Main Scenario"
+            or data.get("page", {}).get("display_name") != CFO["page"]
+            or data.get("scenario") != CFO["scenario"]
             or data.get("coverage", {}).get("calculation") != "complete"
             or data.get("coverage", {}).get("delivery") != "complete"
             or data.get("next")):
-        # shortcut: fail closed on paginated synthetic tables; add continuation when they grow.
-        raise RuntimeError(f"CFO {name} read is incomplete or outside the synthetic page")
+        # shortcut: fail closed on paginated tables; add continuation when they grow.
+        raise RuntimeError(f"CFO {name} read is incomplete or outside the configured page")
     columns = [column["display_name"] for column in data["columns"]]
     rows = []
     for row in data["rows"]:
@@ -120,7 +125,7 @@ def read_table(access_token, name, request_id):
     return data, rows
 
 
-def allocate(estimate_path, run_id, issue_number=40):
+def allocate(estimate_path, run_id, issue_number):
     if run_id <= 0 or issue_number <= 0:
         raise ValueError("run ID and issue number must be positive")
     estimate = json.loads(Path(estimate_path).read_text())
@@ -128,9 +133,8 @@ def allocate(estimate_path, run_id, issue_number=40):
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise RuntimeError("Saved estimate has no pinned commit")
     central = estimate["solve_token_estimate"]["central"]
-    repository = "Bhavya031/k-2"
-    repo_id = repository.rsplit("/", 1)[-1].replace("-", "")
-    request_id = f"SYNTHETIC/prism-ci-{repo_id}-issue{issue_number}-run{run_id}"
+    repository = github_repository()
+    request_id = f"{repository}/issue{issue_number}/run{run_id}"
     request = {
         "request_id": request_id,
         "repository": repository,
@@ -146,13 +150,16 @@ def allocate(estimate_path, run_id, issue_number=40):
         "clientInfo": {"name": "prism-cfo-actions", "version": "0.1"},
     }, 1):
         raise RuntimeError("CFO MCP initialization failed")
-    budget_data, budget_rows = read_table(access_token, BUDGET_TABLE, 2)
-    request_data, rows = read_table(access_token, REQUEST_TABLE, 3)
-    if (len(budget_rows) != 1 or
-            [column["display_name"] for column in request_data["columns"]]
-            != [PREFIX + name for name in REQUEST_COLUMNS]):
-        raise RuntimeError("CFO synthetic budget or request table shape changed")
-    _, budget_values = budget_rows[0]
+    PREFIX = CFO["column_prefix"]
+    _, budget_rows = read_table(access_token, CFO["budget_table"], 2)
+    request_data, rows = read_table(access_token, CFO["request_table"], 3)
+    if [column["display_name"] for column in request_data["columns"]] != [PREFIX + name for name in REQUEST_COLUMNS]:
+        raise RuntimeError("CFO request table shape changed")
+    budget_matches = [values for _, values in budget_rows if values.get(PREFIX + "repository") == repository]
+    if len(budget_matches) != 1:
+        raise RuntimeError(f"CFO allocation stopped: blocked: {len(budget_matches)} budget rows for {repository} "
+                           f"in {CFO['budget_table']}; exactly one is required")
+    budget_values = budget_matches[0]
     budget = {"repository": budget_values[PREFIX + "repository"],
               "budget_usd": budget_values[PREFIX + "budget USD"],
               "spending_usd": budget_values[PREFIX + "spending USD"],
@@ -174,7 +181,7 @@ def allocate(estimate_path, run_id, issue_number=40):
             "available_balance": values[PREFIX + "available balance USD"],
             "reason": values[PREFIX + "reason"],
         })
-    # CFO's synthetic budget field is opening reservations; request-table reservations are separate.
+    # CFO's budget field is opening reservations; request-table reservations are separate.
     budget["existing_reservations_usd"] += sum(row["reservation_usd"] for row in allocations
                                                 if row["repository"] == request["repository"] and row["decision"] == "allocated")
     decision, new_row = decide(request, budget, policy, allocations)
@@ -182,7 +189,7 @@ def allocate(estimate_path, run_id, issue_number=40):
         raise RuntimeError("CFO allocation stopped: " + decision["reason"])
     if new_row:
         # Re-read immediately before the additive write; only this namespaced member is touched.
-        latest_data, latest_rows = read_table(access_token, REQUEST_TABLE, 4)
+        latest_data, latest_rows = read_table(access_token, CFO["request_table"], 4)
         if any(member == request_id for member, _ in latest_rows):
             return allocate_existing(access_token, request, request_id)
         if latest_data["as_of"] != request_data["as_of"] or latest_rows != rows:
@@ -194,10 +201,10 @@ def allocate(estimate_path, run_id, issue_number=40):
                   decision["allocated_usd_cap"], new_row["reservation_usd"],
                   decision["available_balance"], decision["reason"]]
         mcp(access_token, "tools/call", {"name": "edit_table_blocks", "arguments": {
-            "org_id": ORG_ID, "scenario": "Main Scenario", "update": {
-                "target": REQUEST_TABLE,
+            "org_id": CFO["org_id"], "scenario": CFO["scenario"], "update": {
+                "target": CFO["request_table"],
                 "based_on": request_data["as_of"],
-                "dimensions": [{"target": "SYNTHETIC prism-test request ID", "add_items": [request_id]}],
+                "dimensions": [{"target": PREFIX + "request ID", "add_items": [request_id]}],
                 "values": {"columns": columns, "rows": [[request_id, *values]]},
             },
         }}, 5)
@@ -205,7 +212,8 @@ def allocate(estimate_path, run_id, issue_number=40):
 
 
 def allocate_existing(access_token, request, request_id):
-    _, rows = read_table(access_token, REQUEST_TABLE, 6)
+    PREFIX = CFO["column_prefix"]
+    _, rows = read_table(access_token, CFO["request_table"], 6)
     matches = [values for member, values in rows if member == request_id]
     if len(matches) != 1:
         raise RuntimeError("CFO allocation read-back did not find exactly one request row")
@@ -234,14 +242,19 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("estimate_json")
     parser.add_argument("run_id", type=int)
-    parser.add_argument("--issue-number", type=int, default=40)
+    parser.add_argument("--issue-number", type=int, required=True)
+    parser.add_argument("--config", required=True, help="the repository's .github/prism.json")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     try:
+        CFO.update(json.loads(Path(args.config).read_text()).get("cfo") or {})
+        missing = [key for key in CFO_KEYS if not isinstance(CFO.get(key), str) or not CFO[key]]
+        if missing:
+            raise RuntimeError(f"{args.config} needs a non-empty string for cfo." + ", cfo.".join(missing))
         result = allocate(args.estimate_json, args.run_id, args.issue_number)
         Path(args.output).write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps(result))
-    except (KeyError, ValueError, RuntimeError) as error:
+    except (OSError, KeyError, ValueError, RuntimeError) as error:
         parser.exit(1, f"{error}\n")
 
 

@@ -55,9 +55,6 @@ jobs:
       ISSUE_NUMBER: ${{ github.event.issue.number }}
       REPLAY_REF: ${{ vars.PRISM_REPLAY_REF }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      WORKER_MODEL: claude-sonnet-5-5
-      PRISM_COMMIT: b11ff17aeae01ded39ca8f52da70e836a5c0b9c8
-      GLANCE_VERSION: v0.1.0
     steps:
       - uses: actions/setup-python@v5
         id: setup_python
@@ -67,14 +64,14 @@ jobs:
         id: setup_go
         with:
           go-version: stable
-      - name: Install pinned Prism
+      - name: Install Prism
         id: install
         env:
           GIT_TERMINAL_PROMPT: "0"
           GIT_CONFIG_COUNT: 1
           GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.PRISME_READ_TOKEN }}@github.com/Bhavya031/Prisme.insteadOf
           GIT_CONFIG_VALUE_0: https://github.com/Bhavya031/Prisme
-        run: pip install "git+https://github.com/Bhavya031/Prisme.git@$PRISM_COMMIT" > /dev/null 2>&1 && python -c 'import neatlogs'
+        run: pip install "git+https://github.com/Bhavya031/Prisme.git@main" > /dev/null 2>&1 && python -c 'import neatlogs'
       - name: Resolve one immutable source commit
         id: source
         run: |
@@ -131,12 +128,24 @@ jobs:
           expected_url="https://github.com/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER"
           [ "$issue_url" = "$expected_url" ] || { echo 'Event issue URL does not match this repository and issue' >&2; exit 1; }
           jq -r '[.issue.title, (.issue.body // "")] | join("\n\n")' "$GITHUB_EVENT_PATH" > issue.txt
+          # Settings come from this repository's default branch, not from the replayed commit.
+          gh api -H 'Accept: application/vnd.github.raw' "repos/$GITHUB_REPOSITORY/contents/.github/prism.json" > prism.json || {
+            echo '.github/prism.json is required in this repository; copy examples/prism.json from Prisme' >&2
+            exit 1
+          }
+          setting() { jq -er ".estimate.$1" prism.json || { echo ".github/prism.json has no estimate.$1" >&2; exit 1; }; }
+          provider=$(setting provider)
+          worker_model=$(setting worker_model)
+          max_cost_usd=$(setting max_cost_usd)
+          max_output_tokens=$(setting max_output_tokens)
+          max_extra_rounds=$(setting max_extra_rounds)
+          timeout_seconds=$(setting timeout_seconds)
           entire_repo="gh/$GITHUB_REPOSITORY"
           if [ -z "$ENTIRE_TOKEN" ]; then
             echo 'ENTIRE_TOKEN is required; register and index this repository with Entire first' >&2
             exit 1
           fi
-          go install github.com/entireio/cli/cmd/entire@v0.11.4 > /dev/null 2>&1 || {
+          go install github.com/entireio/cli/cmd/entire@latest > /dev/null 2>&1 || {
             echo 'Entire CLI installation failed before any model call' >&2
             exit 1
           }
@@ -147,15 +156,17 @@ jobs:
           ensure_ready(sys.argv[1])
           PY
           commit="${{ steps.source.outputs.commit }}"
-          # Pinned Glance release binary, checked against the release's sha256 list before it is unpacked.
+          # Latest Glance release binary, checked against the release's sha256 list before it is unpacked.
           case "$(uname -m)" in x86_64) glance_arch=amd64 ;; aarch64 | arm64) glance_arch=arm64 ;; *) glance_arch=unsupported ;; esac
-          glance_archive="Glance_${GLANCE_VERSION#v}_linux_$glance_arch.tar.gz"
-          glance_url="https://github.com/Bhavya031/Glance/releases/download/$GLANCE_VERSION"
+          glance_url="https://github.com/Bhavya031/Glance/releases/latest/download"
           (cd "$RUNNER_TEMP" &&
-            curl -fsSL --retry 3 -O "$glance_url/$glance_archive" -O "$glance_url/checksums.txt" &&
+            curl -fsSL --retry 3 -O "$glance_url/checksums.txt" &&
+            glance_archive=$(grep -oE "Glance_[^ ]+_linux_$glance_arch\.tar\.gz" checksums.txt | head -n 1) &&
+            [ -n "$glance_archive" ] &&
+            curl -fsSL --retry 3 -O "$glance_url/$glance_archive" &&
             grep -F "  $glance_archive" checksums.txt | sha256sum -c - > /dev/null &&
             mkdir -p "$GOBIN" && tar -xzf "$glance_archive" -C "$GOBIN" glance) > /dev/null 2>&1 || {
-            echo "Glance $GLANCE_VERSION download or sha256 check failed for $glance_archive; check that the release and its checksums.txt exist" >&2
+            echo "Latest Glance release download or sha256 check failed for linux $glance_arch; check that the release and its checksums.txt exist" >&2
             exit 1
           }
           python -c 'import os; from prism import glance; glance.measure("count check", glance=os.environ["PRISM_GLANCE"])' > /dev/null
@@ -165,11 +176,11 @@ jobs:
           if [ -n "$REPLAY_REF" ]; then search=git; fi
           prism predict "$issue_url" --repo "$entire_repo" --event "$GITHUB_EVENT_PATH" \
             --commit "$commit" --checkout source --search "$search" \
-            --provider claude --format json --max-cost-usd 0.10 --max-output-tokens 4000 \
-            --max-extra-rounds 1 --timeout-seconds 180 > predict.json 2> predict.err || status=$?
+            --provider "$provider" --format json --max-cost-usd "$max_cost_usd" --max-output-tokens "$max_output_tokens" \
+            --max-extra-rounds "$max_extra_rounds" --timeout-seconds "$timeout_seconds" > predict.json 2> predict.err || status=$?
           if [ "$status" -eq 0 ]; then
-            prism solve-estimate --issue-file issue.txt --prediction predict.json --provider claude \
-              --commit "$commit" --checkout source --worker-model "$WORKER_MODEL" --mode heuristic \
+            prism solve-estimate --issue-file issue.txt --prediction predict.json --provider "$provider" \
+              --commit "$commit" --checkout source --worker-model "$worker_model" --mode heuristic \
               > estimate.json 2> estimate.err || status=$?
           fi
           prism issue-comment --prediction predict.json --estimate estimate.json \
@@ -206,7 +217,7 @@ jobs:
           if-no-files-found: ignore
   allocate:
     needs: estimate
-    if: github.repository == 'Bhavya031/k-2' && needs.estimate.outputs.estimated == 'true'
+    if: needs.estimate.outputs.estimated == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
@@ -222,13 +233,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.CFO_SECRET_WRITE_TOKEN }}
         run: |
-          if output=$(gh api -i repos/Bhavya031/k-2/actions/secrets/public-key 2>&1); then
+          if output=$(gh api -i "repos/$GITHUB_REPOSITORY/actions/secrets/public-key" 2>&1); then
             printf 'public-key GET: %s\n' "$(printf '%s\n' "$output" | grep -m1 '^HTTP/')"
           else
             printf '%s\n' "$output" | grep -E '^HTTP/|^gh:' || true
             exit 1
           fi
-          if output=$(GH_DEBUG=api gh secret set CFO_SECRET_WRITE_PREFLIGHT --repo Bhavya031/k-2 --body ok 2>&1); then
+          if output=$(GH_DEBUG=api gh secret set CFO_SECRET_WRITE_PREFLIGHT --repo "$GITHUB_REPOSITORY" --body ok 2>&1); then
             printf '%s\n' "$output" | grep '^< HTTP/' | sed 's/^</dummy secret set:/'
           else
             printf '%s\n' "$output" | grep -E '^< HTTP/|^gh:' || true
@@ -251,6 +262,7 @@ jobs:
         run: |
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "prism-estimate-$ISSUE_NUMBER" --dir "$RUNNER_TEMP/prism-estimate"
           test -s "$RUNNER_TEMP/prism-estimate/estimate.json"
+          gh api -H 'Accept: application/vnd.github.raw' "repos/$GITHUB_REPOSITORY/contents/.github/prism.json" > "$RUNNER_TEMP/prism.json"
       - name: Allocate in the synthetic CFO.ai tables and read back
         env:
           RUN_ID: ${{ github.run_id }}
@@ -258,7 +270,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/prism/src
         run: |
           python -m prism.cfo_actions "$RUNNER_TEMP/prism-estimate/estimate.json" "$RUN_ID" \
-            --issue-number "$ISSUE_NUMBER" --output "$RUNNER_TEMP/cfo-allocation.json"
+            --issue-number "$ISSUE_NUMBER" --config "$RUNNER_TEMP/prism.json" --output "$RUNNER_TEMP/cfo-allocation.json"
       - uses: actions/upload-artifact@v4
         with:
           name: prism-cfo-allocation-${{ github.event.issue.number }}-${{ github.run_id }}

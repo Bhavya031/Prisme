@@ -38,7 +38,7 @@ def decide(request: dict, budget: dict | None, policy: dict | None, allocations:
     if amount > available or amount > ceiling * fraction:
         return {"decision": "denied", "allocation_id": None, "allocated_usd_cap": 0,
                 "available_balance": float(available), "reason": "estimate exceeds available balance or policy cap"}, None
-    result = {"decision": "allocated", "allocation_id": f"SYNTHETIC/prism-test-allocation-{request_id}",
+    result = {"decision": "allocated", "allocation_id": f"allocation/{request_id}",
               "allocated_usd_cap": float(amount), "available_balance": float(available - amount),
               "reason": "central end-to-end estimate is within available balance and policy cap"}
     # shortcut: read-before-write is not atomic; use a conditional insert if CFO.ai exposes one.
