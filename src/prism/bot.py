@@ -89,10 +89,12 @@ def _levels(values: dict, show) -> str:
 
 
 def _spent(prediction: dict | None) -> str:
+    if not prediction:
+        return "unknown; no token usage was recorded, and a call in flight may still be billed"
     try:
         discovery = solve.discovery_cost(prediction)
     except (ValueError, TypeError, AttributeError):
-        return "unknown; no model usage was recorded"
+        return "unknown; no token usage was recorded, and a call in flight may still be billed"
     calls = sum(run["model_calls"] or 0 for run in discovery["runs"].values())
     return f"{_usd(discovery['usd'])} on file discovery ({calls} model call(s)); estimated from token counts at list prices"
 

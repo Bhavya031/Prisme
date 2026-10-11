@@ -91,6 +91,8 @@ class BotTests(unittest.TestCase):
         self.assertIn("max_cost_usd", rendered)
         self.assertIn("$0.0181", rendered)
         self.assertNotIn("secret-value-12345", rendered)
+        self.assertIn("spent before stopping", bot.render(None, None, "predict failed").lower())
+        self.assertIn("call in flight may still be billed", bot.render(None, None, "predict failed"))
 
     def test_cli_renders_saved_json_and_gates_without_network(self):
         output = io.StringIO()
