@@ -120,17 +120,21 @@ def read_table(access_token, name, request_id):
     return data, rows
 
 
-def allocate(estimate_path, run_id):
+def allocate(estimate_path, run_id, issue_number=40):
+    if run_id <= 0 or issue_number <= 0:
+        raise ValueError("run ID and issue number must be positive")
     estimate = json.loads(Path(estimate_path).read_text())
     commit = estimate.get("repository_commit", "")
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise RuntimeError("Saved estimate has no pinned commit")
     central = estimate["solve_token_estimate"]["central"]
-    request_id = f"SYNTHETIC/prism-ci-k2-issue40-run{run_id}"
+    repository = "Bhavya031/k-2"
+    repo_id = repository.rsplit("/", 1)[-1].replace("-", "")
+    request_id = f"SYNTHETIC/prism-ci-{repo_id}-issue{issue_number}-run{run_id}"
     request = {
         "request_id": request_id,
-        "repository": "Bhavya031/k-2",
-        "issue_url": "https://github.com/Bhavya031/k-2/issues/40",
+        "repository": repository,
+        "issue_url": f"https://github.com/{repository}/issues/{issue_number}",
         "pinned_commit": commit,
         "model": estimate["worker_model"],
         "estimated_usd": estimate["end_to_end_cost_estimate"]["central"]["usd"],
@@ -230,10 +234,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("estimate_json")
     parser.add_argument("run_id", type=int)
+    parser.add_argument("--issue-number", type=int, default=40)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     try:
-        result = allocate(args.estimate_json, args.run_id)
+        result = allocate(args.estimate_json, args.run_id, args.issue_number)
         Path(args.output).write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps(result))
     except (KeyError, ValueError, RuntimeError) as error:

@@ -83,6 +83,21 @@ class CFOActions(unittest.TestCase):
         self.assertAlmostEqual(result["table_reservation_usd"], 2.80677)
         self.assertEqual(call.call_count, 1)
 
+    def test_request_id_uses_issue_and_estimate_run(self):
+        request_id = "SYNTHETIC/prism-ci-k2-issue41-run38138900611"
+        issue_url = "https://github.com/Bhavya031/k-2/issues/41"
+        existing = BASE_ROW | {PREFIX + "issue URL": issue_url,
+                               PREFIX + "available balance USD": 23.59738}
+        reads = [(None, [("budget", BUDGET)]), (self.request_data, [(request_id, existing)]),
+                 (self.request_data, [(request_id, existing)])]
+        with patch.object(cfo_actions, "refresh_access_token", return_value="access"), \
+             patch.object(cfo_actions, "read_table", side_effect=reads), \
+             patch.object(cfo_actions, "mcp", return_value={"capabilities": {}}) as call:
+            result = cfo_actions.allocate(self.estimate, 38138900611, 41)
+        self.assertEqual((result["request_id"], result["repository"], result["issue_url"]),
+                         (request_id, "Bhavya031/k-2", issue_url))
+        self.assertEqual(call.call_count, 1)
+
     def test_budget_opening_reservations_exclude_request_rows(self):
         estimate = json.loads(self.estimate.read_text())
         estimate["end_to_end_cost_estimate"]["central"]["usd"] = 6
