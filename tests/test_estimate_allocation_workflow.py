@@ -12,6 +12,7 @@ class EstimateAllocationWorkflow(unittest.TestCase):
         self.assertIn("if: github.repository == 'Bhavya031/k-2' && needs.estimate.outputs.estimated == 'true'", allocation)
         self.assertIn("RUN_ID: ${{ github.run_id }}", allocation)
         self.assertIn("ISSUE_NUMBER: ${{ github.event.issue.number }}", allocation)
+        self.assertIn("ref: 28524b636b4dd0de08a8edb48b68b9a8b043d707", allocation)
         self.assertIn('gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "prism-estimate-$ISSUE_NUMBER"', allocation)
         self.assertIn('python -m prism.cfo_actions "$RUNNER_TEMP/prism-estimate/estimate.json" "$RUN_ID"', allocation)
         self.assertIn('group: prism-cfo-allocation\n      cancel-in-progress: false', allocation)

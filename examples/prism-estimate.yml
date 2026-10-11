@@ -236,7 +236,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Bhavya031/Prisme
-          ref: ao/prisme-25/cfo-actions
+          ref: 28524b636b4dd0de08a8edb48b68b9a8b043d707
           path: prism
           token: ${{ secrets.PRISME_READ_TOKEN }}
           persist-credentials: false
