@@ -158,7 +158,8 @@ def allocate(estimate_path, run_id, issue_number):
     budget_matches = [values for _, values in budget_rows if values.get(PREFIX + "repository") == repository]
     if len(budget_matches) != 1:
         return {"request_id": request_id, "decision": "blocked", "usd_cap": None,
-                "reason": f"{len(budget_matches)} budget rows for {repository} in {CFO['budget_table']}; exactly one is required"}
+                "reason": f"{len(budget_matches)} budget rows for {repository} in {CFO['budget_table']}; exactly one is required",
+                "budget_usd": None, "spent_usd": None, "reserved_before_usd": None, "max_budget_fraction": None}
     budget_values = budget_matches[0]
     budget = {"repository": budget_values[PREFIX + "repository"],
               "budget_usd": budget_values[PREFIX + "budget USD"],
@@ -184,15 +185,20 @@ def allocate(estimate_path, run_id, issue_number):
     # CFO's budget field is opening reservations; request-table reservations are separate.
     budget["existing_reservations_usd"] += sum(row["reservation_usd"] for row in allocations
                                                 if row["repository"] == request["repository"] and row["decision"] == "allocated")
+    summary = {"budget_usd": budget["budget_usd"], "spent_usd": budget["spending_usd"],
+               "reserved_before_usd": budget["existing_reservations_usd"] - sum(
+                   row["reservation_usd"] for row in allocations
+                   if row["request_id"] == request_id and row["decision"] == "allocated"),
+               "max_budget_fraction": policy["max_budget_fraction"]}
     decision, new_row = decide(request, budget, policy, allocations)
     if decision["decision"] != "allocated":
         return {"request_id": request_id, "decision": decision["decision"], "usd_cap": None,
-                "reason": decision["reason"]}
+                "reason": decision["reason"]} | summary
     if new_row:
         # Re-read immediately before the additive write; only this namespaced member is touched.
         latest_data, latest_rows = read_table(access_token, CFO["request_table"], 4)
         if any(member == request_id for member, _ in latest_rows):
-            return allocate_existing(access_token, request, request_id)
+            return allocate_existing(access_token, request, request_id) | summary
         if latest_data["as_of"] != request_data["as_of"] or latest_rows != rows:
             raise RuntimeError("CFO request table changed before write; rerun to recalculate the balance")
         columns = [PREFIX + name for name in REQUEST_COLUMNS]
@@ -209,7 +215,7 @@ def allocate(estimate_path, run_id, issue_number):
                 "values": {"columns": columns, "rows": [[request_id, *values]]},
             },
         }}, 5)
-    return allocate_existing(access_token, request, request_id)
+    return allocate_existing(access_token, request, request_id) | summary
 
 
 def allocate_existing(access_token, request, request_id):

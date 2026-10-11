@@ -278,10 +278,43 @@ jobs:
         if: always() && steps.allocation.outcome != 'skipped'
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REQUESTER: ${{ github.event.sender.login }}
         run: |
           if [ -s "$RUNNER_TEMP/cfo-allocation.json" ]; then
-            note=$(jq -r 'if .decision == "allocated" then "Prism budget allocation: allocated. Cap $\(.usd_cap) reserved. Request \(.request_id)" else "Prism budget allocation: \(.decision). \(.reason)" end' "$RUNNER_TEMP/cfo-allocation.json")
-            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$note" || echo 'Could not post budget allocation comment' >&2
+            python - "$RUNNER_TEMP/cfo-allocation.json" > "$RUNNER_TEMP/cfo-allocation.md" <<'PY'
+          import json, os, sys
+          from decimal import Decimal, InvalidOperation
+
+          data = json.load(open(sys.argv[1]))
+          def number(value):
+              try:
+                  amount = Decimal(str(value))
+                  return amount if amount.is_finite() else None
+              except (InvalidOperation, TypeError):
+                  return None
+          def money(value):
+              return f"${value:,.2f}" if value is not None else "—"
+
+          budget = number(data.get("budget_usd"))
+          spent = number(data.get("spent_usd"))
+          reserved = number(data.get("reserved_before_usd"))
+          cap = number(data.get("usd_cap")) or Decimal(0)
+          fraction = number(data.get("max_budget_fraction"))
+          left = budget - spent - reserved - cap if None not in (budget, spent, reserved) else None
+          maximum = budget * fraction if budget is not None and fraction is not None else None
+          status = "allocated" if data["decision"] == "allocated" else "blocked"
+          print(f"### Prism budget allocation: {status}\n")
+          print(f"Requested by @{os.environ['REQUESTER']}\n")
+          print("| | USD |\n|---|---:|")
+          for label, value in (("Repository budget", budget), ("Spent so far", spent),
+                               ("Reserved before this request", reserved), ("This request (cap)", cap),
+                               ("Left after this request", left), ("Max per request", maximum)):
+              print(f"| {label} | {money(value)} |")
+          if status == "blocked":
+              print(f"\nReason: {data['reason']}")
+          print(f"\nRequest: `{data['request_id']}`")
+          PY
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/cfo-allocation.md" || echo 'Could not post budget allocation comment' >&2
           fi
       - uses: actions/upload-artifact@v4
         if: always() && steps.allocation.outcome != 'skipped'
