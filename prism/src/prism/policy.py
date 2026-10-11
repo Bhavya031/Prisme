@@ -4,7 +4,7 @@ import json
 import re
 import shlex
 
-from . import cost, models, results
+from . import cost, github_context, models, results
 
 PROMPT_INSTRUCTION = ("Predict existing implementation, test, docs, changelog, and config files affected by this issue. "
                       "Search the pre-merge Entire mirror again if evidence is insufficient. Return JSON with fix, "
@@ -111,8 +111,7 @@ def recommend(data: dict, task: str, complexity: str, risk: str, max_cost_usd: f
             match = re.fullmatch(r"https://github\.com/[\w.-]+/[\w.-]+/pull/(\d+)", pr_url)
             if not match:
                 raise ValueError("Expected a GitHub pull request URL")
-            number = match.group(1)
-            if re.search(rf"(?<!\d)#{number}(?!\d)|/pull/{number}(?!\d)", prompt):
+            if github_context._target_mention(int(match.group(1))).search(prompt):
                 raise ValueError("Target PR reference leaked into the prompt")
         # shortcut: byte count plus overhead is a conservative token budget, not provider-exact tokenization.
         input_tokens = max(input_tokens, len(prompt.encode()) + 1024)
@@ -143,8 +142,10 @@ def recommend(data: dict, task: str, complexity: str, risk: str, max_cost_usd: f
             raise ValueError("Issue URL and Entire repo must be supplied together")
         result["ready_to_run_cli"] = shlex.join([
             "prism", "predict", issue_url, "--repo", repo, "--provider", choice["provider"], "--format", "json",
-            "--max-cost-usd", str(max_cost_usd), "--timeout-seconds", str(timeout_seconds),
-            "--max-output-tokens", str(output_tokens), "--max-extra-rounds", str(max_retrieval_rounds)])
+            "--max-cost-usd", f"{max_cost_usd:g}", "--timeout-seconds", f"{timeout_seconds:g}",
+            "--max-output-tokens", str(output_tokens),
+            # Only the rounds still unused; the recommendation may come partway through a run.
+            "--max-extra-rounds", str(max(0, max_retrieval_rounds - retrieval_rounds_used))])
         result["cli_note"] = "Runs the chosen provider against the Entire repository; prediction timeout and post-call cost checks apply. One model call can cross the cost threshold before it can be stopped. API charges apply."
     if prompt is not None:
         result["complete_model_prompt"] = prompt

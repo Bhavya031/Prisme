@@ -47,7 +47,7 @@ def parser() -> argparse.ArgumentParser:
     policy.add_argument("--complexity", choices=("simple", "complex"), required=True)
     policy.add_argument("--risk", choices=("low", "high"), required=True)
     policy.add_argument("--max-cost-usd", type=float, required=True)
-    policy.add_argument("--timeout-seconds", type=int, required=True)
+    policy.add_argument("--timeout-seconds", type=float, required=True)
     policy.add_argument("--input-tokens", type=int, default=0)
     policy.add_argument("--output-tokens", type=int, default=4000)
     policy.add_argument("--retrieval-rounds-used", type=int, default=0)
@@ -155,9 +155,20 @@ def main(argv=None) -> None:
         return
     if args.command == "predict":
         from . import entire, tracing
-        from .pipeline import predict
+        from .pipeline import check_budget
         from .github_context import build_context
 
+        providers = ("claude", "openai") if args.provider == "both" else (args.provider,)
+        budget = {"max_cost_usd": args.max_cost_usd, "max_extra": args.max_extra_rounds,
+                  "timeout_seconds": args.timeout_seconds}
+        if args.max_output_tokens is not None:
+            budget["max_output_tokens"] = args.max_output_tokens
+        try:
+            # A bad budget is refused before anything is fetched or spent.
+            for provider in providers:
+                check_budget(provider, **budget)
+        except ValueError as error:
+            raise SystemExit(f"prism predict: {error}") from None
         try:
             entire.ensure_ready(args.repo)
         except RuntimeError as error:
@@ -167,11 +178,6 @@ def main(argv=None) -> None:
             with tracing.workflow("issue-to-files") as span:
                 with tracing.step("collect-context", "TOOL"):
                     ctx = build_context(args.issue_url, entire_repo=args.repo)
-                providers = ("claude", "openai") if args.provider == "both" else (args.provider,)
-                budget = {"max_cost_usd": args.max_cost_usd, "max_extra": args.max_extra_rounds,
-                          "timeout_seconds": args.timeout_seconds}
-                if args.max_output_tokens is not None:
-                    budget["max_output_tokens"] = args.max_output_tokens
                 outcomes = asyncio.run(_predict(ctx, providers, budget))
             predictions, failed = [], {}
             for provider, outcome in zip(providers, outcomes):

@@ -167,6 +167,11 @@ class PolicyTests(NoNetwork):
                          "prism predict https://github.com/o/r/issues/1 --repo gh/me/r --provider openai --format json "
                          "--max-cost-usd 0.1 --timeout-seconds 120 --max-output-tokens 4000 --max-extra-rounds 6")
         cli.parser().parse_args(result["ready_to_run_cli"].split()[1:])
+        # Rounds already used come off the command, and a fractional timeout survives the round trip.
+        later = policy.recommend(saved_result(), "file-finding", "simple", "low", 0.1, 90.5, retrieval_rounds_used=4,
+                                 issue_url="https://github.com/o/r/issues/1", repo="gh/me/r")
+        self.assertTrue(later["ready_to_run_cli"].endswith("--timeout-seconds 90.5 --max-output-tokens 4000 --max-extra-rounds 2"))
+        self.assertEqual(cli.parser().parse_args(later["ready_to_run_cli"].split()[1:]).timeout_seconds, 90.5)
         self.assertNotIn("/Users/", json.dumps(result))
         self.assertNotIn("entire_compare", json.dumps(result))
         # Between the two, only Claude fits a budget below OpenAI's average.
@@ -192,8 +197,10 @@ class PolicyTests(NoNetwork):
         result = self.recommend(context={"issue": "x" * 5000})
         self.assertGreater(result["input_output_budget"]["input_tokens"], 6000)
         self.assertIn("complete_model_prompt", result)
-        with self.assertRaisesRegex(ValueError, "leaked"):
-            self.recommend(context={"issue": "see #77"}, pr_url="https://github.com/o/r/pull/77")
+        for mention in ("see #77", "https://github.com/o/r/PULL/77"):
+            with self.assertRaisesRegex(ValueError, "leaked"):
+                self.recommend(context={"issue": mention}, pr_url="https://github.com/o/r/pull/77")
+        self.assertEqual(self.recommend(context={"issue": "see #770"}, pr_url="https://github.com/o/r/pull/77")["status"], "recommended")
 
     def test_capability_and_context_budget(self):
         cases = [graded(precision=1.0, recall=1.0), graded(precision=0.5, recall=0.5)]
@@ -298,9 +305,26 @@ class BudgetTests(unittest.TestCase):
         with self.assertRaisesRegex(pipeline.BudgetStop, "with 1 model call") as raised:
             self.predict(timeout_seconds=0.3)
         self.assertAlmostEqual(raised.exception.spent["estimated_cost_usd"], 0.003)
-        for budget in ({"max_cost_usd": 0}, {"timeout_seconds": 0}, {"max_output_tokens": 0}, {"max_output_tokens": 128_001}, {"max_extra": -1}):
-            with self.assertRaisesRegex(ValueError, "must be positive"):
+        self.calls.clear()
+        for budget, message in (({"max_cost_usd": 0}, "max_cost_usd must be positive"),
+                                ({"timeout_seconds": 0}, "timeout_seconds must be positive"),
+                                ({"max_output_tokens": 0}, "max_output_tokens must be at least 1"),
+                                ({"max_output_tokens": 128_001}, "at most 128000 for claude-sonnet-5-5"),
+                                ({"max_extra": -1}, "max_extra rounds must not be negative")):
+            with self.assertRaisesRegex(ValueError, message):
                 self.predict(**budget)
+        self.assertEqual(self.calls, [])
+        # A model with no recorded limits has no output ceiling to enforce.
+        with mock.patch.dict(os.environ, {"PRISM_CLAUDE_MODEL": "some-other-model"}):
+            pipeline.check_budget("claude", max_output_tokens=500_000)
+
+    def test_cli_refuses_a_bad_budget_before_fetching_anything(self):
+        with mock.patch.object(cli, "_load_env"), mock.patch.object(entire, "ensure_ready") as ensure_ready, \
+             mock.patch.object(github_context, "build_context") as build_context, \
+             self.assertRaisesRegex(SystemExit, "prism predict: max_output_tokens must be at least 1 and at most 128000 for claude-sonnet-5-5"):
+            cli.main(["predict", "https://github.com/o/r/issues/1", "--repo", "gh/o/r", "--max-output-tokens", "200000"])
+        ensure_ready.assert_not_called()
+        build_context.assert_not_called()
 
     def test_network_timeout_inside_the_pipeline_is_not_the_prediction_deadline(self):
         github_context.fetch_reference.side_effect = TimeoutError("The read operation timed out")
@@ -365,7 +389,9 @@ class BudgetTests(unittest.TestCase):
         self.assertAlmostEqual(spent["estimated_cost_usd"], 0.007)
 
     def test_oversized_prompt_is_rejected_before_any_call(self):
-        self.ctx.bundle.issue["body"] = "x" * 1_000_000
+        # 1 MB is about a quarter of the window and passes; only a prompt that cannot fit is refused.
+        self.assertEqual(pipeline._safe_prompt("x" * 1_000_000, None, "claude"), "x" * 1_000_000)
+        self.ctx.bundle.issue["body"] = "x" * 4_100_000
         with self.assertRaisesRegex(ValueError, "exceed model context window"):
             self.predict()
         self.assertEqual(self.calls, [])

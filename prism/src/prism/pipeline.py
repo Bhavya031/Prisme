@@ -66,10 +66,25 @@ def _safe_prompt(value: str, target_pr: int | None, provider: str | None = None,
     if target_pr is not None and github_context._target_mention(target_pr).search(value):
         raise ValueError("Target PR reference leaked into model prompt")
     limits = models.LIMITS.get(models._model(provider)) if provider else None
-    # Bytes plus overhead is a conservative token count, not provider-exact tokenization.
-    if limits and len(value.encode()) + len(models.SYSTEM.encode()) + max_output_tokens + 1024 > limits["context"]:
+    # Four bytes per token undercounts, so this only rejects a prompt the provider would refuse as well.
+    if limits and (len(value.encode()) + len(models.SYSTEM.encode())) // 4 + max_output_tokens > limits["context"]:
         raise ValueError("Input and reserved output exceed model context window")
     return value
+
+
+def check_budget(provider: str, *, max_cost_usd: float | None = None, max_output_tokens: int = models.MAX_TOKENS,
+                 max_extra: int = 1, timeout_seconds: float | None = None) -> None:
+    """Reject a budget that cannot work, naming the limit at fault."""
+    if max_cost_usd is not None and max_cost_usd <= 0:
+        raise ValueError("max_cost_usd must be positive")
+    if timeout_seconds is not None and timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be positive")
+    if max_extra < 0:
+        raise ValueError("max_extra rounds must not be negative")
+    ceiling = models.LIMITS.get(models._model(provider), {}).get("max_output")
+    if max_output_tokens < 1 or (ceiling is not None and max_output_tokens > ceiling):
+        raise ValueError("max_output_tokens must be at least 1"
+                         + (f" and at most {ceiling} for {models._model(provider)}" if ceiling else ""))
 
 
 def _grouped(terms: list[str], ctx: Context, plan: dict) -> dict:
@@ -134,9 +149,8 @@ async def predict(ctx: Context, provider: str, *, max_cost_usd: float | None = N
                   max_output_tokens: int = models.MAX_TOKENS, max_extra: int = 1,
                   timeout_seconds: float | None = None) -> Prediction:
     """Predict files for one provider, optionally bounded by cost, output, retrieval and time budgets."""
-    if (max_cost_usd is not None and max_cost_usd <= 0) or (timeout_seconds is not None and timeout_seconds <= 0) \
-            or not 1 <= max_output_tokens <= 128_000 or max_extra < 0:
-        raise ValueError("Cost and time budgets must be positive")
+    check_budget(provider, max_cost_usd=max_cost_usd, max_output_tokens=max_output_tokens,
+                 max_extra=max_extra, timeout_seconds=timeout_seconds)
     limits = {"max_cost_usd": max_cost_usd, "max_output_tokens": max_output_tokens,
               "max_extra_rounds": max_extra, "timeout_seconds": timeout_seconds}
     usages: list[Usage] = []
