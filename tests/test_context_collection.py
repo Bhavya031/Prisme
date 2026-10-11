@@ -137,7 +137,7 @@ class ConcurrentCollectionTests(unittest.TestCase):
         values["repos/fork/repo/commits/main"] = {"sha": "b" * 40}
         values[comments_path(1)] = http_error(500)
         with self.assertRaisesRegex(ValueError, "default branch does not match"):
-            build(FakeGitHub(values))
+            build(FakeGitHub(values), pre_merge_sha=None)
 
     def test_missing_references_are_still_skipped(self):
         values = self.references()

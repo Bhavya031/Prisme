@@ -264,6 +264,7 @@ def build_context(
     entire_repo: str,
     pr_url: str | None = None,
     pre_merge_sha: str | None = None,
+    search_checkout: Path | None = None,
 ) -> Context:
     issue_match = ISSUE_URL.fullmatch(issue_url)
     if not issue_match:
@@ -279,8 +280,10 @@ def build_context(
         if pr_url is None or paired:
             _prefetch(pool, fetch, root, issue_number, owner, repo,
                       int(pr_match.group(3)) if paired else None, entire_repo)
-        return _collect(fetch, root, issue_number, owner, repo, pr_url is not None, pr_match if paired else None,
-                        pre_merge_sha, entire_repo)
+        ctx = _collect(fetch, root, issue_number, owner, repo, pr_url is not None, pr_match if paired else None,
+                       pre_merge_sha, entire_repo)
+        ctx.search_commit, ctx.search_checkout = pre_merge_sha, search_checkout
+        return ctx
     finally:
         pool.shutdown(wait=True, cancel_futures=True)
 
@@ -303,7 +306,7 @@ def _collect(fetch, root: str, issue_number: int, owner: str, repo: str, benchma
         if pre_merge_sha is not None and before != pre_merge_sha:
             raise ValueError("Target PR parent does not match pre_merge_sha")
         fork_owner, fork_repo = _github_repo(entire_repo)
-        if _head_sha(fetch, f"repos/{fork_owner}/{fork_repo}") != before:
+        if pre_merge_sha is None and _head_sha(fetch, f"repos/{fork_owner}/{fork_repo}") != before:
             raise ValueError("Entire repository default branch does not match the pre-merge commit")
         known, repo_map = _tree(fetch, root, before)
     else:

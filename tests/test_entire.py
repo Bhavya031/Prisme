@@ -71,6 +71,15 @@ class EntireTests(unittest.TestCase):
             cli.main(["predict", "https://github.com/o/r/issues/1", "--repo", "gh/o/r"])
         build_context.assert_not_called()
 
+    def test_pinned_cli_reaches_context_without_entire_login(self):
+        with mock.patch.object(entire, "ensure_ready", side_effect=RuntimeError("Entire login required")) as ready, \
+             mock.patch("prism.github_context.build_context", side_effect=ValueError("context reached")), \
+             self.assertRaisesRegex(ValueError, "context reached"):
+            cli.main(["predict", "https://github.com/o/r/issues/1", "--repo", "gh/o/r",
+                      "--pr-url", "https://github.com/o/r/pull/2", "--pre-merge-sha", "a" * 40,
+                      "--checkout", "/tmp/source"])
+        ready.assert_not_called()
+
     def test_env_file_fills_only_unset_variables(self):
         with tempfile.TemporaryDirectory() as folder, \
              mock.patch.dict(os.environ, {"PRISM_KEPT": "shell"}):
@@ -81,6 +90,15 @@ class EntireTests(unittest.TestCase):
             self.assertEqual(os.environ["PRISM_NEW"], "file")
             self.assertEqual(os.environ["PRISM_KEPT"], "shell")
             del os.environ["PRISM_NEW"]
+
+    def test_issue_workflow_does_not_load_dotenv(self):
+        with tempfile.TemporaryDirectory() as folder, \
+             mock.patch.dict(os.environ, {"PRISM_SKIP_DOTENV": "1"}):
+            path = os.path.join(folder, ".env")
+            with open(path, "w") as file:
+                file.write("PRISM_IGNORED=file\n")
+            cli._load_env(path)
+            self.assertNotIn("PRISM_IGNORED", os.environ)
 
     def test_tracing_step_is_a_context_manager_with_the_sdk(self):
         sdk = mock.MagicMock()

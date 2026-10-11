@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -19,6 +20,8 @@ class Context:
     cutoff: str | None
     target_pr: int | None
     entire_repo: str
+    search_commit: str | None = None
+    search_checkout: Path | None = None
 
 
 @dataclass
