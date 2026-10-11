@@ -4,3 +4,5 @@ __pycache__/
 benchmark-runs/
 uv.lock
 *.egg-info/
+build/
+dist/
