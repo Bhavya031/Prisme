@@ -7,6 +7,10 @@ on:
         description: Saved k-2 Prism estimate run (issue 40)
         required: true
         default: "38138900610"
+      preflight_only:
+        description: Check GitHub secret write access without CFO OAuth
+        type: boolean
+        default: false
 
 permissions:
   actions: read
@@ -26,7 +30,24 @@ jobs:
       CFO_OAUTH_REFRESH_TOKEN: ${{ secrets.CFO_OAUTH_REFRESH_TOKEN }}
       CFO_SECRET_WRITE_TOKEN: ${{ secrets.CFO_SECRET_WRITE_TOKEN }}
     steps:
+      - name: Check GitHub secret read and write access before CFO OAuth
+        env:
+          GH_TOKEN: ${{ secrets.CFO_SECRET_WRITE_TOKEN }}
+        run: |
+          if output=$(gh api -i repos/Bhavya031/k-2/actions/secrets/public-key 2>&1); then
+            printf 'public-key GET: %s\n' "$(printf '%s\n' "$output" | grep -m1 '^HTTP/')"
+          else
+            printf '%s\n' "$output" | grep -E '^HTTP/|^gh:' || true
+            exit 1
+          fi
+          if output=$(GH_DEBUG=api gh secret set CFO_SECRET_WRITE_PREFLIGHT --repo Bhavya031/k-2 --body ok 2>&1); then
+            printf '%s\n' "$output" | grep '^< HTTP/' | sed 's/^</dummy secret set:/'
+          else
+            printf '%s\n' "$output" | grep -E '^< HTTP/|^gh:' || true
+            exit 1
+          fi
       - uses: actions/checkout@v4
+        if: ${{ !inputs.preflight_only }}
         with:
           repository: Bhavya031/Prisme
           ref: ao/prisme-25/cfo-actions
@@ -34,9 +55,11 @@ jobs:
           token: ${{ secrets.PRISME_READ_TOKEN }}
           persist-credentials: false
       - uses: actions/setup-python@v5
+        if: ${{ !inputs.preflight_only }}
         with:
           python-version: "3.12"
       - name: Download the saved estimate; no discovery or model call
+        if: ${{ !inputs.preflight_only }}
         env:
           RUN_ID: ${{ inputs.run_id }}
         run: |
@@ -44,6 +67,7 @@ jobs:
           gh run download "$RUN_ID" --repo Bhavya031/k-2 --name prism-estimate-40 --dir "$RUNNER_TEMP/prism-estimate"
           test -s "$RUNNER_TEMP/prism-estimate/estimate.json"
       - name: Allocate in the synthetic CFO.ai tables and read back
+        if: ${{ !inputs.preflight_only }}
         env:
           RUN_ID: ${{ inputs.run_id }}
           PYTHONPATH: ${{ github.workspace }}/prism/src
@@ -51,7 +75,7 @@ jobs:
           python -m prism.cfo_actions "$RUNNER_TEMP/prism-estimate/estimate.json" "$RUN_ID" \
             --output "$RUNNER_TEMP/cfo-allocation.json"
       - uses: actions/upload-artifact@v4
-        if: success()
+        if: ${{ success() && !inputs.preflight_only }}
         with:
           name: prism-cfo-allocation-${{ inputs.run_id }}
           path: ${{ runner.temp }}/cfo-allocation.json

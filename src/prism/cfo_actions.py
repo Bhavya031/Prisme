@@ -42,7 +42,8 @@ def refresh_access_token():
         input=writer, text=True, capture_output=True, env=env,
     )
     if preflight.returncode:
-        raise RuntimeError("CFO secret-write token cannot update k-2 Actions secrets; OAuth refresh was not attempted")
+        detail = preflight.stderr.strip() if preflight.stderr else f"gh exit {preflight.returncode}"
+        raise RuntimeError(f"CFO secret-write token cannot update k-2 Actions secrets; OAuth refresh was not attempted: {detail}")
     payload = urllib.parse.urlencode({
         "grant_type": "refresh_token", "client_id": client_id, "refresh_token": refresh_token,
     }).encode()
@@ -66,7 +67,8 @@ def refresh_access_token():
         )
         if saved.returncode == 0:
             return result["access_token"]
-    raise RuntimeError("CFO refresh succeeded but the rotated credential could not be saved to k-2 Actions secrets; reauthorization may be required")
+    detail = saved.stderr.strip() if saved.stderr else f"gh exit {saved.returncode}"
+    raise RuntimeError(f"CFO refresh succeeded but the rotated credential could not be saved to k-2 Actions secrets; reauthorization may be required: {detail}")
 
 
 def mcp(access_token, method, params, request_id):

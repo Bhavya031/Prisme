@@ -81,9 +81,10 @@ class CFOActions(unittest.TestCase):
         secrets = {"CFO_OAUTH_CLIENT_ID": "client", "CFO_OAUTH_REFRESH_TOKEN": "refresh",
                    "CFO_SECRET_WRITE_TOKEN": "writer"}
         with patch.dict(os.environ, secrets), \
-             patch.object(cfo_actions.subprocess, "run", return_value=subprocess.CompletedProcess([], 1)) as run, \
+             patch.object(cfo_actions.subprocess, "run", return_value=subprocess.CompletedProcess(
+                 [], 1, stderr="gh: Resource not accessible by personal access token (HTTP 403)")) as run, \
              patch.object(cfo_actions.urllib.request, "urlopen") as urlopen:
-            with self.assertRaisesRegex(RuntimeError, "OAuth refresh was not attempted"):
+            with self.assertRaisesRegex(RuntimeError, "OAuth refresh was not attempted: gh: .*HTTP 403"):
                 cfo_actions.refresh_access_token()
         self.assertEqual(run.call_args.args[0][3], "CFO_SECRET_WRITE_TOKEN")
         urlopen.assert_not_called()
