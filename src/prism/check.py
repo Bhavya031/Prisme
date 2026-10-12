@@ -1,9 +1,11 @@
 """Read-only setup checks shared by prism check and prism init."""
 
 import json
+import itertools
 import os
 import re
 import sys
+import threading
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -19,6 +21,8 @@ BANNER = """██████╗  ██████╗  ██╗ ████
 ██╔═══╝  ██╔══██╗ ██║ ╚════██║ ██║╚██╔╝██║
 ██║      ██║  ██║ ██║ ███████║ ██║ ╚═╝ ██║
 ╚═╝      ╚═╝  ╚═╝ ╚═╝ ╚══════╝ ╚═╝     ╚═╝"""
+SPECTRUM = ((255, 95, 109), (255, 166, 87), (255, 221, 89),
+            (117, 221, 114), (101, 220, 222), (187, 148, 255))
 
 
 def paint(value: str, code: str) -> str:
@@ -33,8 +37,19 @@ def link(url: str) -> str:
     return url
 
 
+def spectrum_code(index: int) -> str:
+    if "truecolor" in os.getenv("COLORTERM", "").lower() or "24bit" in os.getenv("COLORTERM", "").lower():
+        return "1;38;2;" + ";".join(map(str, SPECTRUM[index]))
+    if "256color" in os.getenv("TERM", ""):
+        return f"1;38;5;{(203, 215, 227, 120, 80, 177)[index]}"
+    return f"1;{(91, 33, 93, 92, 96, 95)[index]}"
+
+
 def banner() -> None:
-    print(paint(BANNER, "1;36"))
+    width = max(map(len, BANNER.splitlines()))
+    for line in BANNER.splitlines():
+        print("".join(paint(line[index * width // 6:(index + 1) * width // 6], spectrum_code(index))
+                      for index in range(6)))
     print(paint("automated estimation and allocation", "1"))
 
 
@@ -60,7 +75,7 @@ def _stored_secret(repo: str, name: str, token: str) -> bool:
         return False
 
 
-def inspect(repo: str, config_path: Path) -> list[tuple]:
+def inspect(repo: str, config_path: Path, on_start=None, on_row=None) -> list[tuple]:
     """Return (service, purpose, state, words, fix) without exposing credentials."""
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
         raise ValueError("--repo must be owner/name")
@@ -68,6 +83,8 @@ def inspect(repo: str, config_path: Path) -> list[tuple]:
 
     def row(name, purpose, state, words, fix=None):
         rows.append((name, purpose, state, words, fix))
+        if on_row:
+            on_row(rows[-1])
 
     try:
         config = json.loads(config_path.read_text())
@@ -83,6 +100,8 @@ def inspect(repo: str, config_path: Path) -> list[tuple]:
     provider = estimate.get("provider") if isinstance(estimate, dict) else None
     worker_model = estimate.get("worker_model") if isinstance(estimate, dict) else None
     model_name = {"openai": "OpenAI", "claude": "Anthropic"}.get(provider, "Model provider")
+    if on_start:
+        on_start(model_name, "Predict files and estimate cost")
     key_name = {"openai": "OPENAI_API_KEY", "claude": "ANTHROPIC_API_KEY"}.get(provider)
     key_problem = None
     if key_name is None:
@@ -115,6 +134,8 @@ def inspect(repo: str, config_path: Path) -> list[tuple]:
     else:
         row(model_name, "Predict files and estimate cost", "PASS", "Key and pricing checks passed")
 
+    if on_start:
+        on_start("Entire", "Search repository")
     if not os.getenv("ENTIRE_TOKEN"):
         row("Entire", "Search repository", "BLOCK", "Token missing",
             ("add your token", "Run entire login, then save the result of entire auth token as ENTIRE_TOKEN.",
@@ -139,6 +160,8 @@ def inspect(repo: str, config_path: Path) -> list[tuple]:
                      GUIDE + "how-to-get-entire"))
 
     cfo = config.get("cfo") if config else None
+    if on_start:
+        on_start("CFO.ai", "Allocate budget")
     missing_config = [key for key in cfo_actions.CFO_KEYS if not isinstance(cfo, dict)
                       or not isinstance(cfo.get(key), str) or not cfo[key]]
     pending = config is not None and '"PENDING"' in json.dumps(config)
@@ -158,6 +181,8 @@ def inspect(repo: str, config_path: Path) -> list[tuple]:
                  else "Client ID configured; sign-in tested by a real run")
         row("CFO.ai", "Allocate budget", "WARN", words)
 
+    if on_start:
+        on_start("GitHub", "Repository access and secret updates")
     repos = cfo.get("shared_login_repos", [repo]) if isinstance(cfo, dict) else None
     if (not isinstance(repos, list) or not repos or repo not in repos
             or any(not isinstance(item, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", item) for item in repos)
@@ -183,10 +208,14 @@ def inspect(repo: str, config_path: Path) -> list[tuple]:
         else:
             row("GitHub", "Repository access and secret updates", "WARN", "Read verified; write untested")
 
+    if on_start:
+        on_start("NeatLogs", "Trace agent activity")
     if os.getenv("NEATLOGS_API_KEY"):
         row("NeatLogs", "Trace agent activity", "WARN", "Key present; connection unverified")
     else:
         row("NeatLogs", "Trace agent activity", "MISSING", "Disabled")
+    if on_start:
+        on_start("Glance", "Count tokens locally")
     try:
         glance.locate()
         row("Glance", "Count tokens locally", "WARN", "Installed; counting untested")
@@ -195,29 +224,33 @@ def inspect(repo: str, config_path: Path) -> list[tuple]:
     return rows
 
 
-def show(rows: list[tuple], repo: str, config_path: Path) -> bool:
-    blockers = [name for name, _, state, _, _ in rows if state == "BLOCK"]
-    if blockers:
-        names = ", ".join(blockers[:-1]) + (" and " if len(blockers) > 1 else "") + blockers[-1]
-        headline = status_text("BLOCK", f"Not ready — fix {names} before running")
-    else:
-        headline = status_text("PASS", "Ready to run")
+def _header(repo: str) -> None:
     banner()
     print()
     print(paint("Setup check", "1"))
     print(f"Repository: {repo}")
-    print(headline)
     print()
     print(paint(f"{'Service':<17} | {'Purpose':<37} | Status", "1"))
-    for name, purpose, state, words, _ in rows:
-        code = {"PASS": "1;32", "BLOCK": "1;31", "WARN": "1;33", "MISSING": "1;90"}[state]
-        print(f"{paint(f'{name:<17}', code)} | {purpose:<37} | {status_text(state, words)}")
-        if name in ("OpenAI", "Anthropic", "Model provider"):
-            try:
-                model = json.loads(config_path.read_text()).get("estimate", {}).get("worker_model")
-            except (OSError, ValueError, AttributeError):
-                model = None
-            print(f"  {paint(str(model or 'No model selected'), '2')}")
+
+
+def _print_row(row: tuple, config_path: Path) -> None:
+    name, purpose, state, words, _ = row
+    code = {"PASS": "1;32", "BLOCK": "1;31", "WARN": "1;33", "MISSING": "1;90"}[state]
+    print(f"{paint(f'{name:<17}', code)} | {purpose:<37} | {status_text(state, words)}")
+    if name in ("OpenAI", "Anthropic", "Model provider"):
+        try:
+            model = json.loads(config_path.read_text()).get("estimate", {}).get("worker_model")
+        except (OSError, ValueError, AttributeError):
+            model = None
+        print(f"  {paint(str(model or 'No model selected'), '2')}")
+
+
+def show(rows: list[tuple], repo: str, config_path: Path, streamed: bool = False) -> bool:
+    blockers = [name for name, _, state, _, _ in rows if state == "BLOCK"]
+    if not streamed:
+        _header(repo)
+        for row in rows:
+            _print_row(row, config_path)
     try:
         estimate = json.loads(config_path.read_text()).get("estimate", {})
     except (OSError, ValueError, AttributeError):
@@ -257,4 +290,39 @@ def summary(rows: list[tuple]) -> None:
 
 
 def run(repo: str, config_path: Path) -> bool:
-    return show(inspect(repo, config_path), repo, config_path)
+    _header(repo)
+    spinning = sys.stdout.isatty()
+    stopped = threading.Event()
+    thread = None
+
+    def start(name: str, purpose: str) -> None:
+        nonlocal thread
+        if not spinning:
+            return
+        stopped.clear()
+
+        def spin() -> None:
+            for frame in itertools.cycle("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"):
+                if stopped.is_set():
+                    break
+                sys.stdout.write(f"\r\033[2K{name:<17} | {purpose:<37} | {frame} Checking...")
+                sys.stdout.flush()
+                stopped.wait(0.1)
+
+        thread = threading.Thread(target=spin, daemon=True)
+        thread.start()
+
+    def done(row: tuple) -> None:
+        if thread:
+            stopped.set()
+            thread.join()
+            sys.stdout.write("\r\033[2K")
+        _print_row(row, config_path)
+
+    try:
+        rows = inspect(repo, config_path, start, done)
+    finally:
+        stopped.set()
+        if thread:
+            thread.join()
+    return show(rows, repo, config_path, streamed=True)

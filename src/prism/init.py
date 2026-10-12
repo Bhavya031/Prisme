@@ -40,12 +40,11 @@ def _menu(options: list[tuple[str, str]], selected: int = 0) -> int:
     interactive = sys.stdin.isatty() and sys.stdout.isatty()
 
     def draw() -> None:
-        width = max(len(f"❯ {index + 1}. {label} · {description}") for index, (label, description) in enumerate(options)) + 2
         for index, (label, description) in enumerate(options):
             marker = "❯" if interactive and index == selected else " "
             choice = f"{marker} {index + 1}. {label}"
             if interactive and index == selected:
-                print(check.paint(f"{choice} · {description}".ljust(width), "1;7;36"))
+                print(check.paint(f"{choice} · {description}", check.spectrum_code(5)))
             else:
                 print(choice + (check.paint(f" · {description}", "2") if interactive else f" · {description}"))
 
@@ -223,7 +222,7 @@ def _configure_cfo(repo: str, config: dict) -> bool:
 def run(repo: str, config_path: Path) -> bool:
     _screen("How do you want to set up Prism?")
     choice = _menu([("Set it up for me", "guided, one step at a time"),
-                    ("I will do it myself", "show me the guide")])
+                    ("I will do it myself", "show me the guide")], selected=0)
     if choice == 1:
         print(check.link(check.GUIDE + "configuration"))
         print(check.link(check.GUIDE + "how-to-get-entire"))
