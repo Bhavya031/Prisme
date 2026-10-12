@@ -13,6 +13,29 @@ from . import cfo_actions, entire, glance, solve
 
 TIMEOUT = 15
 GUIDE = "https://github.com/Bhavya031/Prisme/blob/main/docs/SETUP.md#"
+BANNER = """██████╗  ██████╗  ██╗ ███████╗ ███╗   ███╗
+██╔══██╗ ██╔══██╗ ██║ ██╔════╝ ████╗ ████║
+██████╔╝ ██████╔╝ ██║ ███████╗ ██╔████╔██║
+██╔═══╝  ██╔══██╗ ██║ ╚════██║ ██║╚██╔╝██║
+██║      ██║  ██║ ██║ ███████║ ██║ ╚═╝ ██║
+╚═╝      ╚═╝  ╚═╝ ╚═╝ ╚══════╝ ╚═╝     ╚═╝"""
+
+
+def paint(value: str, code: str) -> str:
+    if sys.stdout.isatty() and "NO_COLOR" not in os.environ:
+        return f"\033[{code}m{value}\033[0m"
+    return value
+
+
+def banner() -> None:
+    print(paint(BANNER, "1;36"))
+    print(paint("automated estimation and allocation", "1"))
+
+
+def status_text(state: str, words: str) -> str:
+    icon, code = {"PASS": ("🟢", "32"), "BLOCK": ("🔴", "31"),
+                  "WARN": ("🟡", "33"), "MISSING": ("⚪", "90")}[state]
+    return f"{icon} {paint(words, code)}"
 
 
 def _get(url: str, headers: dict) -> None:
@@ -167,36 +190,28 @@ def inspect(repo: str, config_path: Path) -> list[tuple]:
 
 
 def show(rows: list[tuple], repo: str, config_path: Path) -> bool:
-    terminal = sys.stdout.isatty()
-    color = terminal and "NO_COLOR" not in os.environ
-
-    def style(value: str, code: str) -> str:
-        return f"\033[{code}m{value}\033[0m" if color else value
-
-    def status(state: str, words: str) -> str:
-        icon, code = {"PASS": ("🟢", "32"), "BLOCK": ("🔴", "31"),
-                      "WARN": ("🟡", "33"), "MISSING": ("⚪", "90")}[state]
-        return f"{icon} {style(words, code)}"
-
     blockers = [name for name, _, state, _, _ in rows if state == "BLOCK"]
     if blockers:
         names = ", ".join(blockers[:-1]) + (" and " if len(blockers) > 1 else "") + blockers[-1]
-        headline = status("BLOCK", f"Not ready — fix {names} before running")
+        headline = status_text("BLOCK", f"Not ready — fix {names} before running")
     else:
-        headline = status("PASS", "Ready to run")
-    print("Prism · Setup check")
+        headline = status_text("PASS", "Ready to run")
+    banner()
+    print()
+    print(paint("Setup check", "1"))
     print(f"Repository: {repo}")
     print(headline)
     print()
-    print(f"{'Service':<17} | {'Purpose':<37} | Status")
+    print(paint(f"{'Service':<17} | {'Purpose':<37} | Status", "1"))
     for name, purpose, state, words, _ in rows:
-        print(f"{style(f'{name:<17}', '1')} | {purpose:<37} | {status(state, words)}")
+        code = {"PASS": "1;32", "BLOCK": "1;31", "WARN": "1;33", "MISSING": "1;90"}[state]
+        print(f"{paint(f'{name:<17}', code)} | {purpose:<37} | {status_text(state, words)}")
         if name in ("OpenAI", "Anthropic", "Model provider"):
             try:
                 model = json.loads(config_path.read_text()).get("estimate", {}).get("worker_model")
             except (OSError, ValueError, AttributeError):
                 model = None
-            print(f"  {style(str(model or 'No model selected'), '2')}")
+            print(f"  {paint(str(model or 'No model selected'), '2')}")
     try:
         estimate = json.loads(config_path.read_text()).get("estimate", {})
     except (OSError, ValueError, AttributeError):
@@ -206,7 +221,7 @@ def show(rows: list[tuple], repo: str, config_path: Path) -> bool:
     provider = {"openai": "OpenAI", "claude": "Anthropic"}.get(estimate.get("provider"), "Not set")
     cap = estimate.get("max_cost_usd")
     cap_text = f"${cap:g}" if isinstance(cap, (int, float)) else "Not set"
-    print("\nConfigured")
+    print("\n" + paint("Configured", "1"))
     print(f"  Provider: {provider}")
     print(f"  Model: {estimate.get('worker_model') or 'Not set'}")
     print(f"  Spending cap per estimate: {cap_text} (configured, not a verified balance)")
@@ -214,7 +229,7 @@ def show(rows: list[tuple], repo: str, config_path: Path) -> bool:
         print()
         for index, (name, _, state, _, fix) in enumerate((row for row in rows if row[2] == "BLOCK"), 1):
             title, action, guide = fix
-            print(style(f"{index}. {name} — {title}", "1"))
+            print(paint(f"{index}. {name} — {title}", "1"))
             print(action)
             print(guide)
             if index < len(blockers):

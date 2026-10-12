@@ -389,6 +389,8 @@ def main(argv=None) -> None:
 
         try:
             passed = init.run(args.repo, args.config)
+        except KeyboardInterrupt:
+            raise SystemExit("prism init: Setup cancelled.") from None
         except (OSError, RuntimeError, ValueError) as error:
             raise SystemExit(f"prism init: {error}") from None
         if not passed:

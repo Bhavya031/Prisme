@@ -10,7 +10,7 @@ From the directory containing `.env`, run `prism check --repo owner/name` for th
 
 The CFO.ai refresh token cannot be validated safely without rotating it. The check looks for the client ID and refresh token in GitHub secret metadata when its read token permits this; a missing local refresh token alone is not a blocker. Reading GitHub's public key proves read access, not permission to write secrets. Glance is shown as optional when absent; install it before a local estimate that needs context measurement.
 
-Run `prism init --repo owner/name` to check, fill missing settings and secrets, and offer the two caller workflow files. Add `--config configs/portfolio.json` for the shared config. It asks for a local checkout when it needs to create `.github/prism.json` or caller files. It saves entered keys through `gh secret set` and never displays their values. Review and commit any files it adds to the target checkout; the command does not commit or push them. The older `scripts/setup-github.sh` remains available, but `prism init` is the guided entry point.
+Run `prism init --repo owner/name` for guided setup, or choose the guide-only option on its first screen. Add `--config configs/portfolio.json` for the shared config. In a terminal, use ↑/↓ and Enter or a number key to choose; Esc or q cancels. Nonterminal input uses numbered prompts. It asks for a local checkout when it needs to create `.github/prism.json` or caller files. It saves entered keys through `gh secret set` and never displays their values. Review and commit any files it adds to the target checkout; the command does not commit or push them. The older `scripts/setup-github.sh` remains available, but `prism init` is the guided entry point.
 
 ## How to get Entire
 
