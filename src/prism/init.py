@@ -11,6 +11,7 @@ import termios
 import tty
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlsplit
 
 from . import cfo_actions, check, local_env
 from .models import PRICES
@@ -118,15 +119,31 @@ def _hidden(name: str) -> str:
 
 
 def _repo_name(value: str) -> str:
-    value = value.strip().rstrip("/")
-    for prefix in ("https://github.com/", "git@github.com:", "ssh://git@github.com/", "git://github.com/"):
-        if value.startswith(prefix):
-            value = value[len(prefix):]
-            break
-    value = value.removesuffix(".git")
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", value):
-        raise ValueError("repository must be owner/name or a GitHub repository URL")
-    return value
+    value = value.strip().strip("<>").strip()
+    error = "Use owner/name or a github.com link (bare, http(s), git://, ssh://, or git@github.com:)."
+    if re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9_.-]+", value):
+        name = value.removesuffix(".git")
+        if re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9_.-]+", name):
+            return name
+    if re.match(r"(?i)^git@(?:www\.)?github\.com:", value):
+        value = "ssh://" + value.replace(":", "/", 1)
+    elif re.match(r"(?i)^(?:www\.)?github\.com/", value):
+        value = "https://" + value
+    try:
+        parts = urlsplit(value)
+        host = (parts.hostname or "").lower()
+    except ValueError:
+        raise ValueError(error) from None
+    if parts.scheme.lower() not in ("http", "https", "git", "ssh") or host not in (
+            "github.com", "www.github.com"):
+        raise ValueError(error)
+    segments = parts.path.strip("/").split("/")
+    if len(segments) < 2:
+        raise ValueError(error)
+    repo = f"{segments[0]}/{segments[1].removesuffix('.git')}"
+    if not re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9_.-]+", repo):
+        raise ValueError(error)
+    return repo
 
 
 def _verify_github(repo: str) -> None:
@@ -301,6 +318,7 @@ def run(repo: str | None, config_path: Path) -> bool:
     if github:
         _screen("GitHub repository", "Enter the repository that will run Prism.")
         repo = _repo_name(_input(f"Repository link{f' [{repo}]' if repo else ''}: ") or repo or "")
+        print(f"Repository: {repo}")
         _verify_github(repo)
     elif repo:
         repo = _repo_name(repo)
