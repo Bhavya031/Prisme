@@ -334,15 +334,16 @@ def _configure_cfo(repo: str | None, config: dict) -> bool:
             if value.strip():
                 cfo[key] = value
                 changed = True
-    if repo and "shared_login_repos" not in cfo:
-        value = _input(f"Repositories sharing this login, comma separated (Enter for {repo} only): ")
-        if value:
-            repos = [item.strip() for item in value.split(",")]
-            if repo not in repos or len(repos) != len(set(repos)) or any(
-                    not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", item) for item in repos):
-                raise ValueError("shared login repositories must be unique owner/name values including --repo")
-            cfo["shared_login_repos"] = repos
-            changed = True
+    if repo and not cfo.get("shared_login_repos"):
+        print("The CFO.ai sign-in changes every run, so every repository using the same sign-in must be listed here or the others stop working.")
+        defaults = cfo.get("shared_login_repos") or [repo]
+        value = _input(f"Repositories sharing this login, comma separated [{', '.join(defaults)}]: ")
+        repos = [item.strip() for item in value.split(",")] if value else defaults
+        if repo not in repos or len(repos) != len(set(repos)) or any(
+                not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", item) for item in repos):
+            raise ValueError("shared login repositories must be unique owner/name values including --repo")
+        cfo["shared_login_repos"] = repos
+        changed = True
     return changed
 
 
