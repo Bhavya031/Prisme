@@ -1,4 +1,10 @@
-# Prism
+<h1 align="center">Prism</h1>
+<p align="center">Powered by</p>
+<p align="center">
+  <a href="https://cfo.ai/"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/logos/cfo-dark.svg"><img src="docs/assets/logos/cfo-light.svg" alt="CFO.ai" height="30"></picture></a>&nbsp;&nbsp;&nbsp;
+  <a href="https://entire.io/"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/logos/entire-dark.svg"><img src="docs/assets/logos/entire-light.svg" alt="Entire" height="30"></picture></a>&nbsp;&nbsp;&nbsp;
+  <a href="https://neatlogs.com/"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/logos/neatlogs-dark.svg"><img src="docs/assets/logos/neatlogs-light.svg" alt="neatlogs" height="30"></picture></a>
+</p>
 
 ![Prism: automated estimation and allocation](docs/assets/prism-poster.webp)
 
@@ -23,6 +29,26 @@ Or run without installing: `uvx --from git+https://github.com/Bhavya031/Prisme.g
 | NeatLogs; Glance | Optional tracing key and local token counter |
 
 `BLOCK` needs action; `WARN` could not be fully verified; `MISSING` can mean an optional item is absent.
+
+## Results
+
+In a benchmark of 15 real open-source issues, Claude Sonnet found 73% of fix files on average (71% precision; 5 of 15 exact file sets). OpenAI GPT-6 Sol found 83% (62% precision; 3 of 15 exact). Estimated file-discovery cost was about $0.71 total for 60 model calls. This run used direct Git search at each pinned pre-merge commit, not Entire search. It measures file prediction only, not cost-estimate accuracy or completed fixes.
+
+## Evidence: real runs
+
+Each issue below has both Prism comments: the estimate with predicted files and the budget allocation.
+
+| Repo | Issue |
+|---|---|
+| Bhavya031/flask | [#5 Raise error when blueprint name contains a dot](https://github.com/Bhavya031/flask/issues/5) |
+| Bhavya031/werkzeug | [#5 ProxyFix should not set SERVER_NAME or SERVER_PORT](https://github.com/Bhavya031/werkzeug/issues/5) |
+| Bhavya031/markupsafe | [#1 escape() fails with certain str subclasses](https://github.com/Bhavya031/markupsafe/issues/1) |
+| Bhavya031/itsdangerous | [#1 URLSafeSerializer.dumps may return bytes](https://github.com/Bhavya031/itsdangerous/issues/1) |
+| Bhavya031/quart | [#1 App appends :5000 to the name of a socket file](https://github.com/Bhavya031/quart/issues/1) |
+| Bhavya031/k-2 | [#48 Trim surrounding whitespace in offline report search](https://github.com/Bhavya031/k-2/issues/48) |
+| Bhavya031/k-2 | [#47 Show document page numbers on offline report exceptions](https://github.com/Bhavya031/k-2/issues/47) |
+
+The open-source forks already contain the upstream fixes, so these show the workflow end to end; the accuracy numbers come from the 15-issue benchmark above.
 
 ## Set up the workflow on your repo
 
@@ -176,38 +202,6 @@ Prism is a Python CLI with example GitHub Actions workflows. An eligible issue o
 - **Estimate comment:** one marked comment is first reserved as “Estimating,” then updated with predicted files (**scope**), measured starting context and low/central/high projected tokens (**usage**), solve and end-to-end USD estimates (**cost**), discovery spend, worker model, and pinned commit. A failure updates it with the stopping reason when possible.
 - **Allocation comment:** on a successful estimate, a separate comment mentions the requester, repeats the predicted files, and shows the budget, spending, reservations, allocated amount, remaining balance, and request limit. It shows the saved budget rule's chosen model and reason, three suggested models, and other models in a fold-out. A blocked result has no new reservation. When the request ID already has a reservation row, the comment says it was already recorded and no second reservation was added.
 
-## Results
-
-In a benchmark of 15 real open-source issues, Claude Sonnet found 73% of fix files on average (71% precision; 5 of 15 exact file sets). OpenAI GPT-6 Sol found 83% (62% precision; 3 of 15 exact). Estimated file-discovery cost was about $0.71 total for 60 model calls. This run used direct Git search at each pinned pre-merge commit, not Entire search. It measures file prediction only, not cost-estimate accuracy or completed fixes.
-
-## Evidence: real runs
-
-Each issue below has both Prism comments: the estimate with predicted files and the budget allocation.
-
-| Repo | Issue |
-|---|---|
-| Bhavya031/flask | [#5 Raise error when blueprint name contains a dot](https://github.com/Bhavya031/flask/issues/5) |
-| Bhavya031/werkzeug | [#5 ProxyFix should not set SERVER_NAME or SERVER_PORT](https://github.com/Bhavya031/werkzeug/issues/5) |
-| Bhavya031/markupsafe | [#1 escape() fails with certain str subclasses](https://github.com/Bhavya031/markupsafe/issues/1) |
-| Bhavya031/itsdangerous | [#1 URLSafeSerializer.dumps may return bytes](https://github.com/Bhavya031/itsdangerous/issues/1) |
-| Bhavya031/quart | [#1 App appends :5000 to the name of a socket file](https://github.com/Bhavya031/quart/issues/1) |
-| Bhavya031/k-2 | [#48 Trim surrounding whitespace in offline report search](https://github.com/Bhavya031/k-2/issues/48) |
-| Bhavya031/k-2 | [#47 Show document page numbers on offline report exceptions](https://github.com/Bhavya031/k-2/issues/47) |
-
-The open-source forks already contain the upstream fixes, so these show the workflow end to end; the accuracy numbers come from the 15-issue benchmark above.
-
 ## CFO.ai data boundary
 
 Prism writes the repository name, issue URL, and projected **uncached input, cached input, and output tokens** to the configured decision test table. The saved budget rule supplies the allow/block decision, chosen model, allocated USD amount, reason, and model suggestions. Prism reads the computed decision row, checks the inputs and approved amount against available funds and the request limit, then writes the pinned commit, chosen model, token counts, amount, and reason to the reservation table for a new approved request. It reads the reservation back to confirm it. **Prism prices its own estimate before this step; it sends no price list, repository code, or issue text in these CFO.ai calls.** The issue URL is included.
-
-## Sponsors
-
-Thanks to the projects whose tools make the scope, usage, and cost workflow possible:
-
-| | |
-|---|---|
-| <img src="https://raw.githubusercontent.com/Bhavya031/Glance/main/assets/logo.png" alt="Glance logo" width="48"> | [Glance](https://github.com/Bhavya031/Glance) |
-| <img src="https://avatars.githubusercontent.com/u/33188652?v=4" alt="Entire logo" width="48"> | [Entire](https://entire.io/) |
-| <img src="https://neatlogs.com/apple-icon.png" alt="Neatlogs logo" width="48"> | [Neatlogs](https://neatlogs.com/) |
-| <img src="https://cfo.ai/apple-icon.png" alt="CFO.ai logo" width="48"> | [CFO.ai](https://cfo.ai/) |
-| <img src="https://avatars.githubusercontent.com/u/76263028?v=4" alt="Anthropic logo" width="48"> | [Anthropic](https://www.anthropic.com/) |
