@@ -13,7 +13,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import cfo_actions, entire, glance, solve
+from . import cfo_actions, entire, glance, results, solve
 
 
 TIMEOUT = 15
@@ -250,17 +250,24 @@ def inspect(repo: str | None, config_path: Path | None, on_start=None, on_row=No
             entire.ensure_ready(f"gh/{repo}", timeout=TIMEOUT)
             row("Entire", "Search repository", "PASS", "Token and repository ready")
         except (OSError, RuntimeError) as error:
-            detail = str(error).lower()
-            if "401" in detail or "expired" in detail:
+            detail = str(error).partition(f"Cannot use Entire repository gh/{repo}: ")[2] or str(error)
+            detail = detail.splitlines()[0].split(". Authenticate with `entire login`")[0]
+            detail = re.sub(r"[A-Za-z0-9_-]{24,}", "[REDACTED]", results.redact(detail))[:180]
+            reason = detail.lower()
+            if "repository not found" in reason or "repo not found" in reason:
+                row("Entire", "Search repository", "BLOCK", "Repository not found on Entire",
+                    ("index the repository", f"Add and index {repo} in Entire.",
+                     GUIDE + "how-to-get-entire"))
+            elif "expired" in reason or "401" in reason:
                 row("Entire", "Search repository", "BLOCK", "Token expired",
                     ("refresh your token", "Run entire auth token and replace the ENTIRE_TOKEN Actions secret.",
                      GUIDE + "how-to-get-entire"))
-            elif "not ready" in detail:
-                row("Entire", "Search repository", "BLOCK", "Repository not ready",
+            elif "not ready" in reason:
+                row("Entire", "Search repository", "BLOCK", detail,
                     ("index the repository", f"Add and index {repo} in Entire.",
                      GUIDE + "how-to-get-entire"))
             else:
-                row("Entire", "Search repository", "BLOCK", "Repository access failed",
+                row("Entire", "Search repository", "BLOCK", detail,
                     ("check repository access", "Sign in to Entire and confirm the repository mirror is ready.",
                      GUIDE + "how-to-get-entire"))
 
