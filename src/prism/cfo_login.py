@@ -16,16 +16,40 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from .cfo_actions import MCP, TOKEN
 
 
-def _json_request(url, fields, *, form=False):
-    data = urllib.parse.urlencode(fields).encode() if form else json.dumps(fields).encode()
+def _json_request(url, fields, step, *, form=False):
+    data = urllib.parse.urlencode(fields) if form else json.dumps(fields)
     content_type = "application/x-www-form-urlencoded" if form else "application/json"
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, data, {"Content-Type": content_type}), timeout=30) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as error:
-        raise RuntimeError(f"CFO.ai OAuth request failed (HTTP {error.code})") from None
-    except (urllib.error.URLError, ValueError):
-        raise RuntimeError("CFO.ai OAuth request failed") from None
+        response = subprocess.run(
+            ["curl", "--silent", "--show-error", "--max-time", "30", "--request", "POST",
+             "--header", f"Content-Type: {content_type}", "--header", "Accept: application/json",
+             "--data-binary", "@-",
+             "--write-out", "\nHTTP_STATUS:%{http_code}", url],
+            input=data, text=True, capture_output=True,
+        )
+    except OSError:
+        raise RuntimeError(f"CFO.ai {step} failed: curl is unavailable") from None
+    body, marker, status = response.stdout.rpartition("\nHTTP_STATUS:")
+    if response.returncode or not marker:
+        raise RuntimeError(f"CFO.ai {step} failed (curl exit {response.returncode})")
+    try:
+        result = json.loads(body)
+    except ValueError:
+        result = None
+    if status not in ("200", "201"):
+        details = []
+        if isinstance(result, dict):
+            for key in ("error", "error_description"):
+                value = result.get(key)
+                if isinstance(value, str):
+                    for secret in (fields.get("code"), fields.get("code_verifier")):
+                        if secret:
+                            value = value.replace(secret, "[redacted]")
+                    details.append(re.sub(r"[A-Za-z0-9_-]{24,}", "[redacted]", " ".join(value.split()))[:200])
+        raise RuntimeError(f"CFO.ai {step} failed (HTTP {status})" + (": " + "; ".join(details) if details else ""))
+    if not isinstance(result, dict):
+        raise RuntimeError(f"CFO.ai {step} returned no JSON object")
+    return result
 
 
 def _set_secret(repo, name, value):
@@ -111,7 +135,7 @@ def login(args):
                 "client_name": "Prism CLI", "redirect_uris": [redirect_uri],
                 "grant_types": ["authorization_code", "refresh_token"],
                 "response_types": ["code"], "token_endpoint_auth_method": "none",
-            })
+            }, "registration")
             client_id = registered.get("client_id")
             if not isinstance(client_id, str) or not client_id:
                 raise RuntimeError("CFO.ai registration returned no client ID")
@@ -147,7 +171,7 @@ def login(args):
     result = _json_request(TOKEN, {
         "grant_type": "authorization_code", "client_id": client_id, "code": code,
         "redirect_uri": redirect_uri, "code_verifier": verifier,
-    }, form=True)
+    }, "code exchange", form=True)
     refresh_token = result.get("refresh_token")
     if not isinstance(refresh_token, str) or not refresh_token:
         raise RuntimeError("CFO.ai exchange returned no refresh token")
