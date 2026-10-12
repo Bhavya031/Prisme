@@ -13,7 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
-from . import cfo_actions, check, local_env, results
+from . import check, local_env, results
 from .models import PRICES
 
 
@@ -301,40 +301,6 @@ def _status_screen(title: str, sentence: str, row: tuple) -> None:
     _screen(title, sentence, row[2], row[3])
 
 
-def _configure_cfo(repo: str | None, config: dict) -> bool:
-    cfo = config["cfo"]
-    changed = False
-    print(check.link(check.GUIDE + "how-to-get-cfo-ai"))
-    examples = json.loads(check.github_file("Bhavya031/Prisme", "configs/portfolio.json", "main") or "{}").get("cfo", {})
-    explanations = {
-        "org_id": "Your CFO.ai workspace number, shown in the app address after /org/",
-        "scenario": "The scenario containing your tables, shown in the scenario selector",
-        "page": "The page containing the tables, shown in the page sidebar",
-        "budget_table": "The repository budget table, named at the top of its table",
-        "request_table": "The allocation request table, named at the top of its table",
-        "decision_table": "The saved rule's decision table, named at the top of its table",
-        "column_prefix": "The exact start of the table's column names, including a trailing space",
-    }
-    for key in cfo_actions.CFO_KEYS:
-        if not isinstance(cfo.get(key), str) or not cfo[key] or cfo[key] == "PENDING":
-            print(f"{key}: {explanations[key]} · example {examples.get(key, '')!r}")
-            value = _input("Enter value (Enter to skip): ", strip=key != "column_prefix")
-            if value.strip():
-                cfo[key] = value
-                changed = True
-    if repo and not cfo.get("shared_login_repos"):
-        print("The CFO.ai sign-in changes every run, so every repository using the same sign-in must be listed here or the others stop working.")
-        defaults = cfo.get("shared_login_repos") or [repo]
-        value = _input(f"Repositories sharing this login, comma separated [{', '.join(defaults)}]: ")
-        repos = [item.strip() for item in value.split(",")] if value else defaults
-        if repo not in repos or len(repos) != len(set(repos)) or any(
-                not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", item) for item in repos):
-            raise ValueError("shared login repositories must be unique owner/name values including --repo")
-        cfo["shared_login_repos"] = repos
-        changed = True
-    return changed
-
-
 def run(repo: str | None, config_path: Path | None) -> bool:
     _screen("How do you want to set up Prism?")
     choice = _menu([("Set it up for me", "guided, one step at a time"),
@@ -513,14 +479,9 @@ def run(repo: str | None, config_path: Path | None) -> bool:
             _screen("CFO.ai", "CFO.ai decides whether the estimate fits the budget.", "BLOCK", "Local sign-in required")
         else:
             _status_screen("CFO.ai", "CFO.ai decides whether the estimate fits the budget.", cfo_row)
-        if can_save_config and "config incomplete" in cfo_row[3].lower():
-            if _menu([("Enter table settings", "use the names from your CFO.ai page"),
-                      ("Skip for now", "leave the config unchanged")]) == 0:
-                if _configure_cfo(repo, config):
-                    changed = True
-                    pending_updates.add("CFO.ai")
-            else:
-                markers.setdefault("CFO.ai", "skipped")
+        if "config incomplete" in cfo_row[3].lower():
+            print("Set up your CFO.ai tables and settings with the guide, then run prism init again")
+            print(check.link(check.GUIDE + "how-to-get-cfo-ai"))
         if cfo_row[3].startswith("Sign-in required") or local_sign_in_missing:
             if _menu([("Sign in now", "opens your browser"),
                       ("Skip for now", "sign in later")]) == 0:
