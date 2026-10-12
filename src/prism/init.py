@@ -463,7 +463,7 @@ def run(repo: str | None, config_path: Path | None) -> bool:
 
     saved_entire = False
     entire_row = _row(rows, "Entire")
-    if entire_row[2] != "PASS":
+    if entire_row[2] == "BLOCK":
         _status_screen("Entire", "Entire searches the indexed repository before a model call.", entire_row)
         choice = _menu([("Refresh it from my Entire login", "use entire auth token"),
                         ("Paste a token", "enter it hidden"),
