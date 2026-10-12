@@ -122,7 +122,8 @@ def _hidden(name: str) -> str:
 def _entire_token() -> str | None:
     try:
         result = subprocess.run(["entire", "auth", "token"], capture_output=True,
-                                text=True, timeout=15)
+                                text=True, timeout=15,
+                                env={k: v for k, v in os.environ.items() if k != "ENTIRE_TOKEN"})
     except FileNotFoundError:
         print("Entire CLI is not installed or not on PATH.")
         return None
@@ -453,7 +454,8 @@ def run(repo: str | None, config_path: Path | None) -> bool:
                     try:
                         print("Complete Entire sign-in in your browser.")
                         login_result = subprocess.run(["entire", "login"], capture_output=True,
-                                                      text=True, timeout=300)
+                                                      text=True, timeout=300,
+                                                      env={k: v for k, v in os.environ.items() if k != "ENTIRE_TOKEN"})
                         if login_result.returncode:
                             print(f"entire login failed (exit {login_result.returncode}).")
                         else:
