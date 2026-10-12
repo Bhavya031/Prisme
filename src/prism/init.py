@@ -453,12 +453,19 @@ def run(repo: str | None, config_path: Path | None) -> bool:
 
     saved_entire = False
     entire_row = _row(rows, "Entire")
-    if entire_row[2] == "BLOCK":
+    if entire_row[2] != "PASS":
         _status_screen("Entire", "Entire searches the indexed repository before a model call.", entire_row)
-        choice = _menu([("Refresh it from my Entire login", "use entire auth token"),
-                        ("Paste a token", "enter it hidden"),
-                        ("Skip for now", "leave the current token unchanged")])
-        if choice == 0:
+        stored = entire_row[2] == "WARN"
+        options = ([("Keep the stored token", "it cannot be read back to test")] if stored else []) + [
+            ("Refresh it from my Entire login", "use entire auth token"),
+            ("Paste a token", "enter it hidden")]
+        if not stored:
+            options.append(("Skip for now", "leave the current token unchanged"))
+        choice = _menu(options)
+        if stored and choice == 0:
+            saved_entire = github and not local
+            markers["Entire"] = "skipped"
+        elif choice == (1 if stored else 0):
             token = _entire_token()
             if not token:
                 if _menu([("Run entire login", "sign in, then retry the token"),
@@ -480,7 +487,7 @@ def run(repo: str | None, config_path: Path | None) -> bool:
             else:
                 print("Entire token was not refreshed. Run entire login and try again.")
                 markers["Entire"] = "skipped"
-        elif choice == 1:
+        elif choice == (2 if stored else 1):
             value = _hidden("ENTIRE_TOKEN")
             if value:
                 _secret(repo, "ENTIRE_TOKEN", value, github=github, local=local)
