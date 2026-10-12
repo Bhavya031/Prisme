@@ -13,7 +13,7 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from . import check
+from . import check, results
 from .cfo_actions import MCP, TOKEN
 
 
@@ -53,14 +53,17 @@ def _json_request(url, fields, step, *, form=False):
     return result
 
 
-def _set_secret(repo, name, value):
+def _set_secret(repo, name, value, env=None):
     try:
         result = subprocess.run(["gh", "secret", "set", name, "--repo", repo], input=value,
-                                text=True, capture_output=True, check=False)
+                                text=True, capture_output=True, check=False, env=env)
     except OSError:
         raise RuntimeError("gh is unavailable; install and authenticate GitHub CLI") from None
     if result.returncode:
-        raise RuntimeError(f"cannot write Actions secrets in {repo} (gh exit {result.returncode})")
+        line = next((line.strip() for line in result.stderr.splitlines() if line.strip()), "gh returned no details")
+        reason = re.sub(r"[A-Za-z0-9_-]{24,}", "[REDACTED]",
+                        results.redact(line.replace(value, "[REDACTED]")))[:180]
+        raise RuntimeError(f"cannot write Actions secrets in {repo} (gh exit {result.returncode}): {reason}")
 
 
 def _listener(port):
@@ -117,7 +120,7 @@ def login(args):
     redirect_uri = f"http://127.0.0.1:{port}/callback"
     try:
         for repo in dict.fromkeys(args.repo):
-            _set_secret(repo, "CFO_SECRET_WRITE_PREFLIGHT", "ok")
+            _set_secret(repo, "CFO_SECRET_WRITE_PREFLIGHT", "ok", getattr(args, "gh_env", None))
         print("GitHub Actions secret access checked.", flush=True)
 
         # Discover endpoint names from the same authorization server used by refresh.
@@ -179,8 +182,8 @@ def login(args):
     print("Authorization code exchanged.", flush=True)
     for repo in dict.fromkeys(args.repo):
         try:
-            _set_secret(repo, "CFO_OAUTH_CLIENT_ID", client_id)
-            _set_secret(repo, "CFO_OAUTH_REFRESH_TOKEN", refresh_token)
+            _set_secret(repo, "CFO_OAUTH_CLIENT_ID", client_id, getattr(args, "gh_env", None))
+            _set_secret(repo, "CFO_OAUTH_REFRESH_TOKEN", refresh_token, getattr(args, "gh_env", None))
         except RuntimeError as error:
             raise RuntimeError(f"{error}; a new sign-in is needed") from None
     if args.repo:

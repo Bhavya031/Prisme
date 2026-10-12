@@ -191,9 +191,10 @@ def inspect(repo: str | None, config_path: Path, on_start=None, on_row=None, loc
     repos = cfo.get("shared_login_repos", [repo]) if isinstance(cfo, dict) else None
     if local:
         row("GitHub", "Repository access and secret updates", "MISSING", "Local setup; Actions secrets not used")
-    elif (not isinstance(repos, list) or not repos or repo not in repos
+    elif (not isinstance(repos, list) or not repos or repo.casefold() not in (
+            item.casefold() for item in repos if isinstance(item, str))
             or any(not isinstance(item, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", item) for item in repos)
-            or len(repos) != len(set(repos))):
+            or len(repos) != len({item.casefold() for item in repos if isinstance(item, str)})):
         row("GitHub", "Repository access and secret updates", "BLOCK", "Shared repository list invalid",
             ("fix shared repositories", f"List each shared repository once and include {repo}.",
              GUIDE + "configuration"))

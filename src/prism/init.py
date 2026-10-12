@@ -13,7 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
-from . import cfo_actions, check, local_env
+from . import cfo_actions, check, local_env, results
 from .models import PRICES
 
 
@@ -118,9 +118,37 @@ def _hidden(name: str) -> str:
         raise Cancelled("Setup cancelled.") from None
 
 
+def _entire_token() -> str | None:
+    try:
+        result = subprocess.run(["entire", "auth", "token"], capture_output=True,
+                                text=True, timeout=15)
+    except FileNotFoundError:
+        print("Entire CLI is not installed or not on PATH.")
+        return None
+    except OSError:
+        print("entire auth token could not start.")
+        return None
+    except subprocess.TimeoutExpired:
+        print("entire auth token timed out.")
+        return None
+    if result.returncode:
+        print(f"entire auth token failed (exit {result.returncode}); sign in with entire login.")
+        return None
+    token = result.stdout.strip()
+    if not token:
+        print("entire auth token returned no token; sign in with entire login.")
+        return None
+    if any(character.isspace() for character in token):
+        print("entire auth token returned unexpected output; no token was saved.")
+        return None
+    return token
+
+
 def _repo_name(value: str) -> str:
-    value = value.strip().strip("<>").strip()
     error = "Use owner/name or a github.com link (bare, http(s), git://, ssh://, or git@github.com:)."
+    if not isinstance(value, str):
+        raise ValueError(error)
+    value = value.strip().strip("<>").strip()
     if re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9_.-]+", value):
         name = value.removesuffix(".git")
         if re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9_.-]+", name):
@@ -146,26 +174,53 @@ def _repo_name(value: str) -> str:
     return repo
 
 
-def _verify_github(repo: str) -> None:
+def _gh_env() -> dict:
+    env = os.environ.copy()
+    dotenv = {}
+    if not env.get("PRISM_SKIP_DOTENV") and Path(".env").is_file():
+        for line in Path(".env").read_text().splitlines():
+            name, separator, value = line.partition("=")
+            name = name.strip().removeprefix("export ").strip()
+            if separator and name in ("GH_TOKEN", "GITHUB_TOKEN"):
+                dotenv[name] = value.strip().strip("\"'")
+    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
+        if env.get(name) and (env[name] == dotenv.get(name) or env[name] == env.get("CFO_SECRET_WRITE_TOKEN")):
+            env.pop(name)
+    return env
+
+
+def _gh_reason(stderr: str, secret: str = "") -> str:
+    line = next((line.strip() for line in stderr.splitlines() if line.strip()), "gh returned no details")
+    if secret:
+        line = line.replace(secret, "[REDACTED]")
+    return re.sub(r"[A-Za-z0-9_-]{24,}", "[REDACTED]", results.redact(line))[:180]
+
+
+def _verify_github(repo: str) -> str:
+    gh_env = _gh_env()
     try:
         auth = subprocess.run(["gh", "auth", "status", "--hostname", "github.com"],
-                              capture_output=True, text=True, timeout=15)
+                              capture_output=True, text=True, timeout=15, env=gh_env)
     except (OSError, subprocess.TimeoutExpired):
         raise RuntimeError("GitHub CLI is unavailable; install gh and run gh auth login") from None
     if auth.returncode:
-        raise RuntimeError("GitHub CLI is not logged in; run gh auth login")
+        raise RuntimeError(f"GitHub CLI is not logged in; run gh auth login ({_gh_reason(auth.stderr)})")
     try:
-        result = subprocess.run(["gh", "api", f"repos/{repo}"], capture_output=True, text=True, timeout=15)
+        result = subprocess.run(["gh", "api", f"repos/{repo}"], capture_output=True,
+                                text=True, timeout=15, env=gh_env)
     except (OSError, subprocess.TimeoutExpired):
         raise RuntimeError(f"could not reach {repo} with gh; check the connection and repository link") from None
     if result.returncode:
-        raise RuntimeError(f"GitHub repository {repo} is not reachable with this account")
+        raise RuntimeError(f"GitHub repository {repo} is not reachable with this account ({_gh_reason(result.stderr)})")
     try:
         details = json.loads(result.stdout)
     except ValueError:
         raise RuntimeError("gh returned invalid repository details") from None
     if not isinstance(details, dict):
         raise RuntimeError("gh returned invalid repository details")
+    canonical = details.get("full_name")
+    if not isinstance(canonical, str) or not re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9_.-]+", canonical):
+        raise RuntimeError("gh returned no valid canonical repository name")
     permissions = details.get("permissions") or {}
     if not isinstance(permissions, dict):
         raise RuntimeError("gh returned invalid repository permissions")
@@ -173,7 +228,8 @@ def _verify_github(repo: str) -> None:
         raise RuntimeError(f"{repo}: admin or maintain permission is needed to set Actions secrets")
     if not permissions.get("push"):
         raise RuntimeError(f"{repo}: push permission is needed to add caller workflow files")
-    print(f"GitHub access verified for {repo}: repository, secrets role, and push permission.")
+    print(f"GitHub access verified for {canonical}: repository, secrets role, and push permission.")
+    return canonical
 
 
 def _warn_env_ignore() -> None:
@@ -192,7 +248,7 @@ def _checkout(repo: str) -> Path | None:
     checkout = Path(path).expanduser().resolve()
     result = subprocess.run(["git", "-C", str(checkout), "remote", "get-url", "origin"],
                             capture_output=True, text=True, timeout=15)
-    if result.returncode or _repo_name(result.stdout.strip()) != repo:
+    if result.returncode or _repo_name(result.stdout.strip()).casefold() != repo.casefold():
         raise ValueError(f"{checkout} is not a checkout of {repo}")
     return checkout
 
@@ -200,17 +256,16 @@ def _checkout(repo: str) -> Path | None:
 def _secret(repo: str | None, name: str, value: str, repos: list[str] | None = None,
             github: bool = True, local: bool = False) -> None:
     targets = (repos or [repo]) if github else []
-    for target in targets:
-        if target != repo:
-            _verify_github(_repo_name(target))
+    targets = [repo if _repo_name(target).casefold() == repo.casefold()
+               else _verify_github(_repo_name(target)) for target in targets]
     for target in targets:
         try:
             result = subprocess.run(["gh", "secret", "set", name, "--repo", target],
-                                    input=value, text=True, capture_output=True, timeout=30)
+                                    input=value, text=True, capture_output=True, timeout=30, env=_gh_env())
         except (OSError, subprocess.TimeoutExpired):
             raise RuntimeError(f"could not save {name} in {target}; check gh login") from None
         if result.returncode:
-            raise RuntimeError(f"could not save {name} in {target}; check Actions secret permission")
+            raise RuntimeError(f"could not save {name} in {target}: {_gh_reason(result.stderr, value)}")
     if local:
         local_env.save(name, value)
     else:
@@ -319,7 +374,7 @@ def run(repo: str | None, config_path: Path) -> bool:
         _screen("GitHub repository", "Enter the repository that will run Prism.")
         repo = _repo_name(_input(f"Repository link{f' [{repo}]' if repo else ''}: ") or repo or "")
         print(f"Repository: {repo}")
-        _verify_github(repo)
+        repo = _verify_github(repo)
     elif repo:
         repo = _repo_name(repo)
     else:
@@ -340,12 +395,16 @@ def run(repo: str | None, config_path: Path) -> bool:
     config = _read_config(config_path)
     if github:
         shared = config["cfo"].get("shared_login_repos", [])
-        if isinstance(shared, list):
-            for target in shared:
-                if isinstance(target, str) and target != repo:
-                    _verify_github(_repo_name(target))
+        changed = False
+        if isinstance(shared, list) and all(isinstance(target, str) for target in shared):
+            canonical = [repo if _repo_name(target).casefold() == repo.casefold()
+                         else _verify_github(_repo_name(target)) for target in shared]
+            if canonical != shared:
+                config["cfo"]["shared_login_repos"] = canonical
+                changed = True
+    else:
+        changed = False
     rows = check.inspect(repo, config_path, local=not github)
-    changed = False
     model_row = next(row for row in rows if row[0] in ("OpenAI", "Anthropic", "Model provider"))
     _status_screen("Model provider", "Prism uses this key to predict files and estimate cost.", model_row)
     if model_row[2] != "PASS" or _menu([("Keep it", "use the current provider and key"),
@@ -381,25 +440,22 @@ def run(repo: str | None, config_path: Path) -> bool:
                         ("Paste a token", "enter it hidden"),
                         ("Skip for now", "leave the current token unchanged")])
         if choice == 0:
-            try:
-                result = subprocess.run(["entire", "auth", "token"], capture_output=True,
-                                        text=True, timeout=15)
-            except (OSError, subprocess.TimeoutExpired):
-                result = None
-            if result is None or result.returncode or not result.stdout.strip():
-                print("Entire CLI is not logged in or could not supply a token.")
+            token = _entire_token()
+            if not token:
                 if _menu([("Run entire login", "sign in, then retry the token"),
                           ("Skip for now", "leave the current token unchanged")]) == 0:
                     try:
                         print("Complete Entire sign-in in your browser.")
                         login_result = subprocess.run(["entire", "login"], capture_output=True,
                                                       text=True, timeout=300)
-                        result = subprocess.run(["entire", "auth", "token"], capture_output=True,
-                                                text=True, timeout=15) if login_result.returncode == 0 else None
+                        if login_result.returncode:
+                            print(f"entire login failed (exit {login_result.returncode}).")
+                        else:
+                            token = _entire_token()
                     except (OSError, subprocess.TimeoutExpired):
-                        result = None
-            if result is not None and result.returncode == 0 and result.stdout.strip():
-                _secret(repo, "ENTIRE_TOKEN", result.stdout.strip(), github=github, local=local)
+                        print("entire login did not complete.")
+            if token:
+                _secret(repo, "ENTIRE_TOKEN", token, github=github, local=local)
             else:
                 print("Entire token was not refreshed. Run entire login and try again.")
         elif choice == 1:
@@ -431,13 +487,15 @@ def run(repo: str | None, config_path: Path) -> bool:
         from .cfo_login import login
         repos = config["cfo"].get("shared_login_repos", [repo])
         if github:
-            client_id, refresh = login(SimpleNamespace(repo=repos, client_id=None, port=None, timeout=300))
+            client_id, refresh = login(SimpleNamespace(repo=repos, client_id=None, port=None,
+                                                       timeout=300, gh_env=_gh_env()))
             os.environ["CFO_OAUTH_CLIENT_ID"] = client_id
             os.environ["CFO_OAUTH_REFRESH_TOKEN"] = refresh
         if local:
             if github:
                 print("Local runs need a separate CFO.ai sign-in because each refresh token rotates on use.")
-            client_id, refresh = login(SimpleNamespace(repo=[], client_id=None, port=None, timeout=300))
+            client_id, refresh = login(SimpleNamespace(repo=[], client_id=None, port=None,
+                                                       timeout=300, gh_env=_gh_env()))
             local_env.save("CFO_OAUTH_CLIENT_ID", client_id)
             local_env.save("CFO_OAUTH_REFRESH_TOKEN", refresh)
 
