@@ -272,13 +272,13 @@ def _save_config(path: Path, config: dict, changed: bool, checkout: Path | None,
     return path
 
 
-def _workflows(repo: str, checkout: Path, config_path: Path, remote: bool = False) -> None:
+def _workflows(repo: str, checkout: Path, config_path: Path, missing: list[str], remote: bool = False) -> None:
     shared = config_path != Path(".github/prism.json") if remote else (
         config_path.resolve().is_relative_to(ROOT) and config_path.resolve() !=
         (checkout / ".github/prism.json").resolve())
     config_name = config_path.as_posix() if remote and shared else (
         config_path.resolve().relative_to(ROOT).as_posix() if shared else "")
-    for name in ("prism-estimate.yml", "prism-cfo-allocation.yml"):
+    for name in missing:
         target = checkout / ".github/workflows" / name
         if target.exists():
             print(f"Already present: {target}")
@@ -589,13 +589,6 @@ def run(repo: str | None, config_path: Path | None) -> bool:
     if _row(rows, "Glance")[2] == "MISSING":
         markers["Glance"] = "skipped"
 
-    workflow_names = ("prism-estimate.yml", "prism-cfo-allocation.yml")
-    found = [name for name in workflow_names if github and
-             check.github_file(repo, f".github/workflows/{name}") is not None]
-    for name in found:
-        print(f"Already present on GitHub: .github/workflows/{name}")
-    complete = len(found) == len(workflow_names) or bool(checkout and all(
-        (checkout / ".github/workflows" / name).exists() for name in workflow_names))
     if not github:
         config_path = _save_config(config_path, config, changed, checkout, local=True)
         if changed and config_path.exists():
@@ -603,9 +596,14 @@ def run(repo: str | None, config_path: Path | None) -> bool:
             markers.update({name: "updated" for name in pending_updates})
         print()
         return check.run(repo, config_path, local=True, markers=markers)
-    if not complete:
-        _screen("Workflow files", "Two small caller files connect your repository to Prism.",
-                "MISSING", "Local checkout needed to inspect or add files")
+    workflows = ("prism-estimate.yml", "prism-cfo-allocation.yml")
+    missing = [name for name in workflows if check.github_file(repo, f".github/workflows/{name}") is None]
+    _screen("Workflow files", "Two small caller files connect your repository to Prism.",
+            "MISSING" if missing else "PASS", "Missing on GitHub" if missing else "Both found on GitHub")
+    for name in workflows:
+        if name not in missing:
+            print(f"Found on GitHub: .github/workflows/{name}")
+    if missing:
         workflow_choice = _menu([("Add caller workflows", "copy the two templates to a local checkout"),
                                  ("Skip for now", "add the files later")])
         if workflow_choice == 0:
@@ -617,7 +615,7 @@ def run(repo: str | None, config_path: Path | None) -> bool:
                     if changed and config_path.exists():
                         markers["Config"] = "updated"
                         markers.update({name: "updated" for name in pending_updates})
-                _workflows(repo, checkout, config_path, remote=source.remote)
+                _workflows(repo, checkout, config_path, missing, remote=source.remote)
                 changed = False
     if source.remote and changed:
         raise RuntimeError("Shared GitHub config cannot be saved from this checkout")
