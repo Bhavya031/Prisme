@@ -241,10 +241,11 @@ def _header(repo: str) -> None:
     print(paint(f"{'Service':<17} | {'Purpose':<37} | Status", "1"))
 
 
-def _print_row(row: tuple, config_path: Path) -> None:
+def _print_row(row: tuple, config_path: Path, marker: str | None = None) -> None:
     name, purpose, state, words, _ = row
     code = {"PASS": "1;32", "BLOCK": "1;31", "WARN": "1;33", "MISSING": "1;90"}[state]
-    print(f"{paint(f'{name:<17}', code)} | {purpose:<37} | {status_text(state, words)}")
+    note = f" {paint('· ' + marker, '2')}" if marker else ""
+    print(f"{paint(f'{name:<17}', code)} | {purpose:<37} | {status_text(state, words)}{note}")
     if name in ("OpenAI", "Anthropic", "Model provider"):
         try:
             model = json.loads(config_path.read_text()).get("estimate", {}).get("worker_model")
@@ -297,7 +298,8 @@ def summary(rows: list[tuple]) -> None:
         print(status_text("PASS", "Ready to run"))
 
 
-def run(repo: str | None, config_path: Path, local: bool = False) -> bool:
+def stream(repo: str | None, config_path: Path, local: bool = False,
+           markers: dict[str, str] | None = None) -> list[tuple]:
     _header(repo)
     spinning = sys.stdout.isatty()
     stopped = threading.Event()
@@ -325,7 +327,9 @@ def run(repo: str | None, config_path: Path, local: bool = False) -> bool:
             stopped.set()
             thread.join()
             sys.stdout.write("\r\033[2K")
-        _print_row(row, config_path)
+        name = "Model provider" if row[0] in ("OpenAI", "Anthropic", "Model provider") else row[0]
+        default = "checked" if row[2] == "PASS" or (name == "GitHub" and row[2] == "WARN") else "skipped"
+        _print_row(row, config_path, markers.get(name, default) if markers is not None else None)
 
     try:
         rows = inspect(repo, config_path, start, done, local=local)
@@ -333,4 +337,10 @@ def run(repo: str | None, config_path: Path, local: bool = False) -> bool:
         stopped.set()
         if thread:
             thread.join()
+    return rows
+
+
+def run(repo: str | None, config_path: Path, local: bool = False,
+        markers: dict[str, str] | None = None) -> bool:
+    rows = stream(repo, config_path, local, markers)
     return show(rows, repo, config_path, streamed=True)

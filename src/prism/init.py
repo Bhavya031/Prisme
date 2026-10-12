@@ -386,12 +386,22 @@ def run(repo: str | None, config_path: Path) -> bool:
         if repo:
             local_env.save("GITHUB_REPOSITORY", repo)
 
+    print()
+    rows = check.stream(repo, config_path, local=not github)
+    if sys.stdin.isatty():
+        _input("Press Enter to continue setup...")
+    markers = {}
     checkout = None
-    if github and config_path == Path(".github/prism.json") and not config_path.exists():
-        _screen("Model provider", "First, choose the local checkout that will hold your Prism config.")
+    if github and any(row[0] == "Config" for row in rows) and config_path == Path(".github/prism.json"):
+        _status_screen("Config", "Choose the local checkout that will hold your Prism config.",
+                       _row(rows, "Config"))
         checkout = _checkout(repo)
         if checkout:
             config_path = checkout / config_path
+            markers["Config"] = "checked" if config_path.exists() else "skipped"
+            rows = check.inspect(repo, config_path, local=not github)
+        else:
+            markers["Config"] = "skipped"
     config = _read_config(config_path)
     if github:
         shared = config["cfo"].get("shared_login_repos", [])
@@ -404,11 +414,9 @@ def run(repo: str | None, config_path: Path) -> bool:
                 changed = True
     else:
         changed = False
-    rows = check.inspect(repo, config_path, local=not github)
     model_row = next(row for row in rows if row[0] in ("OpenAI", "Anthropic", "Model provider"))
-    _status_screen("Model provider", "Prism uses this key to predict files and estimate cost.", model_row)
-    if model_row[2] != "PASS" or _menu([("Keep it", "use the current provider and key"),
-                                         ("Change it", "choose a provider or replace its key")]) == 1:
+    if model_row[2] != "PASS":
+        _status_screen("Model provider", "Prism uses this key to predict files and estimate cost.", model_row)
         current = config["estimate"].get("provider")
         choice = _menu([("OpenAI", "gpt-6-sol"), ("Anthropic", "claude-sonnet-5-5"),
                         ("Skip for now", "leave the provider as it is")],
@@ -419,6 +427,7 @@ def run(repo: str | None, config_path: Path) -> bool:
             if config["estimate"].get("provider") != provider or config["estimate"].get("worker_model") != model:
                 config["estimate"].update(provider=provider, worker_model=model)
                 changed = True
+                markers["Model provider"] = "updated"
             key = {"openai": "OPENAI_API_KEY", "claude": "ANTHROPIC_API_KEY"}[provider]
             needs_key = not os.getenv(key) or (provider == current and "Key rejected" in model_row[3])
             if needs_key and _menu([("Enter an API key", f"save {key} for this setup"),
@@ -426,16 +435,23 @@ def run(repo: str | None, config_path: Path) -> bool:
                 value = _hidden(key)
                 if value:
                     _secret(repo, key, value, github=github, local=local)
+                    markers["Model provider"] = "updated"
+                else:
+                    markers.setdefault("Model provider", "skipped")
+            elif needs_key:
+                markers.setdefault("Model provider", "skipped")
+        else:
+            markers["Model provider"] = "skipped"
     for key, value in {"cooldown_minutes": 10, "max_cost_usd": 0.05, "max_output_tokens": 4000,
                        "max_extra_rounds": 1, "timeout_seconds": 180}.items():
         if key not in config["estimate"] or config["estimate"][key] == "PENDING":
             config["estimate"][key] = value
             changed = True
+            markers["Model provider"] = "updated"
 
     entire_row = _row(rows, "Entire")
-    _status_screen("Entire", "Entire searches the indexed repository before a model call.", entire_row)
-    if entire_row[2] != "PASS" or _menu([("Keep it", "current token and repository are ready"),
-                                          ("Change it", "replace the current token")]) == 1:
+    if entire_row[2] != "PASS":
+        _status_screen("Entire", "Entire searches the indexed repository before a model call.", entire_row)
         choice = _menu([("Refresh it from my Entire login", "use entire auth token"),
                         ("Paste a token", "enter it hidden"),
                         ("Skip for now", "leave the current token unchanged")])
@@ -456,53 +472,64 @@ def run(repo: str | None, config_path: Path) -> bool:
                         print("entire login did not complete.")
             if token:
                 _secret(repo, "ENTIRE_TOKEN", token, github=github, local=local)
+                markers["Entire"] = "updated"
             else:
                 print("Entire token was not refreshed. Run entire login and try again.")
+                markers["Entire"] = "skipped"
         elif choice == 1:
             value = _hidden("ENTIRE_TOKEN")
             if value:
                 _secret(repo, "ENTIRE_TOKEN", value, github=github, local=local)
-    entire_row = _row(check.inspect(repo, config_path, local=not github), "Entire")
-    print(check.status_text(entire_row[2], f"Entire: {entire_row[3]}"))
+                markers["Entire"] = "updated"
+            else:
+                markers["Entire"] = "skipped"
+        else:
+            markers["Entire"] = "skipped"
+        entire_row = _row(check.inspect(repo, config_path, local=not github), "Entire")
+        print(check.status_text(entire_row[2], f"Entire: {entire_row[3]}"))
 
     cfo_row = _row(rows, "CFO.ai")
     local_sign_in_missing = local and not all(local_env.present(name) for name in (
         "CFO_OAUTH_CLIENT_ID", "CFO_OAUTH_REFRESH_TOKEN"))
-    if local_sign_in_missing and cfo_row[2] != "BLOCK":
-        _screen("CFO.ai", "CFO.ai decides whether the estimate fits the budget.", "BLOCK", "Local sign-in required")
-    else:
-        _status_screen("CFO.ai", "CFO.ai decides whether the estimate fits the budget.", cfo_row)
-    if "config incomplete" in cfo_row[3].lower():
-        if _menu([("Enter table settings", "use the names from your CFO.ai page"),
-                  ("Skip for now", "leave the config unchanged")]) == 0:
-            changed |= _configure_cfo(repo, config)
-    cfo_sign_in_needed = cfo_row[3].startswith("Sign-in required") or local_sign_in_missing
-    if cfo_sign_in_needed:
-        cfo_choice = _menu([("Sign in now", "opens your browser"),
-                            ("Skip for now", "sign in later")])
-    else:
-        cfo_choice = _menu([("Keep it", "sign-in is configured, not live-tested"),
-                            ("Sign in now", "replace the stored sign-in")])
-    if (cfo_sign_in_needed and cfo_choice == 0) or (not cfo_sign_in_needed and cfo_choice == 1):
-        from .cfo_login import login
-        repos = config["cfo"].get("shared_login_repos", [repo])
-        if github:
-            client_id, refresh = login(SimpleNamespace(repo=repos, client_id=None, port=None,
-                                                       timeout=300, gh_env=_gh_env()))
-            os.environ["CFO_OAUTH_CLIENT_ID"] = client_id
-            os.environ["CFO_OAUTH_REFRESH_TOKEN"] = refresh
-        if local:
-            if github:
-                print("Local runs need a separate CFO.ai sign-in because each refresh token rotates on use.")
-            client_id, refresh = login(SimpleNamespace(repo=[], client_id=None, port=None,
-                                                       timeout=300, gh_env=_gh_env()))
-            local_env.save("CFO_OAUTH_CLIENT_ID", client_id)
-            local_env.save("CFO_OAUTH_REFRESH_TOKEN", refresh)
+    if cfo_row[2] == "BLOCK" or local_sign_in_missing:
+        if local_sign_in_missing and cfo_row[2] != "BLOCK":
+            _screen("CFO.ai", "CFO.ai decides whether the estimate fits the budget.", "BLOCK", "Local sign-in required")
+        else:
+            _status_screen("CFO.ai", "CFO.ai decides whether the estimate fits the budget.", cfo_row)
+        if "config incomplete" in cfo_row[3].lower():
+            if _menu([("Enter table settings", "use the names from your CFO.ai page"),
+                      ("Skip for now", "leave the config unchanged")]) == 0:
+                if _configure_cfo(repo, config):
+                    changed = True
+                    markers["CFO.ai"] = "updated"
+            else:
+                markers.setdefault("CFO.ai", "skipped")
+        if cfo_row[3].startswith("Sign-in required") or local_sign_in_missing:
+            if _menu([("Sign in now", "opens your browser"),
+                      ("Skip for now", "sign in later")]) == 0:
+                from .cfo_login import login
+                repos = config["cfo"].get("shared_login_repos", [repo])
+                if github:
+                    client_id, refresh = login(SimpleNamespace(repo=repos, client_id=None, port=None,
+                                                               timeout=300, gh_env=_gh_env()))
+                    os.environ["CFO_OAUTH_CLIENT_ID"] = client_id
+                    os.environ["CFO_OAUTH_REFRESH_TOKEN"] = refresh
+                if local:
+                    if github:
+                        print("Local runs need a separate CFO.ai sign-in because each refresh token rotates on use.")
+                    client_id, refresh = login(SimpleNamespace(repo=[], client_id=None, port=None,
+                                                               timeout=300, gh_env=_gh_env()))
+                    local_env.save("CFO_OAUTH_CLIENT_ID", client_id)
+                    local_env.save("CFO_OAUTH_REFRESH_TOKEN", refresh)
+                markers["CFO.ai"] = "updated"
+            else:
+                markers.setdefault("CFO.ai", "skipped")
 
     if github:
         github_row = _row(rows, "GitHub")
-        _status_screen("GitHub token", "This token lets Prism save each rotated CFO.ai sign-in.", github_row)
-    if github and github_row[3] == "Shared repository list invalid":
+        if github_row[2] == "BLOCK":
+            _status_screen("GitHub token", "This token lets Prism save each rotated CFO.ai sign-in.", github_row)
+    if github and github_row[2] == "BLOCK" and github_row[3] == "Shared repository list invalid":
         if _menu([("Fix shared repositories", "enter owner/name values, comma separated"),
                   ("Skip for now", "keep the current list")]) == 0:
             value = _input(f"Shared repositories (include {repo}): ")
@@ -512,48 +539,62 @@ def run(repo: str | None, config_path: Path) -> bool:
                 raise ValueError("shared login repositories must be unique owner/name values including --repo")
             config["cfo"]["shared_login_repos"] = repos
             changed = True
-    if (github and github_row[3] != "Shared repository list invalid" and
-            (github_row[2] != "WARN" or _menu([("Keep it", "read access is confirmed"),
-                                               ("Change it", "replace the Actions secret")]) == 1)):
+            markers["GitHub"] = "updated"
+        else:
+            markers["GitHub"] = "skipped"
+    if github and github_row[2] == "BLOCK" and github_row[3] != "Shared repository list invalid":
         if _menu([("Enter a GitHub token", "Secrets: Read and write for shared repositories"),
                   ("Skip for now", "leave the token unchanged")]) == 0:
             value = _hidden("CFO_SECRET_WRITE_TOKEN")
             if value:
                 _secret(repo, "CFO_SECRET_WRITE_TOKEN", value,
                         config["cfo"].get("shared_login_repos", [repo]), github=True, local=local)
+                markers["GitHub"] = "updated"
+            else:
+                markers["GitHub"] = "skipped"
+        else:
+            markers["GitHub"] = "skipped"
 
     neat_row = _row(rows, "NeatLogs")
-    _status_screen("NeatLogs", "NeatLogs can trace agent activity; it is optional.", neat_row)
-    if neat_row[2] != "WARN" or _menu([("Keep it", "leave the current key"),
-                                        ("Change it", "replace the optional key")]) == 1:
+    if neat_row[2] == "MISSING":
+        _status_screen("NeatLogs", "NeatLogs can trace agent activity; it is optional.", neat_row)
         if _menu([("Enter a NeatLogs key", "save it as an Actions secret"),
                   ("Skip for now", "leave tracing disabled")]) == 0:
             value = _hidden("NEATLOGS_API_KEY")
             if value:
                 _secret(repo, "NEATLOGS_API_KEY", value, github=github, local=local)
+                markers["NeatLogs"] = "updated"
+            else:
+                markers["NeatLogs"] = "skipped"
+        else:
+            markers["NeatLogs"] = "skipped"
+    if _row(rows, "Glance")[2] == "MISSING":
+        markers["Glance"] = "skipped"
 
     complete = bool(checkout and all((checkout / ".github/workflows" / name).exists()
                                      for name in ("prism-estimate.yml", "prism-cfo-allocation.yml")))
     if not github:
         config_path = _save_config(config_path, config, changed, checkout, local=True)
+        if changed and config_path.exists():
+            markers["Config"] = "updated"
         print()
-        return check.run(repo, config_path, local=True)
-    _screen("Workflow files", "Two small caller files connect your repository to Prism.",
-            "WARN" if complete else "MISSING",
-            "Caller files present; contents unverified" if complete else "Local checkout needed to inspect or add files")
-    if complete:
-        workflow_choice = _menu([("Keep it", "both caller files are present"),
-                                 ("Change it", "inspect missing caller files")])
-    else:
+        return check.run(repo, config_path, local=True, markers=markers)
+    if not complete:
+        _screen("Workflow files", "Two small caller files connect your repository to Prism.",
+                "MISSING", "Local checkout needed to inspect or add files")
         workflow_choice = _menu([("Add caller workflows", "copy the two templates to a local checkout"),
                                  ("Skip for now", "add the files later")])
-    if (workflow_choice == 0 and not complete) or (workflow_choice == 1 and complete):
-        if checkout is None:
-            checkout = _checkout(repo)
-        if checkout:
-            config_path = _save_config(config_path, config, changed, checkout)
-            _workflows(repo, checkout, config_path)
-    else:
-        config_path = _save_config(config_path, config, changed, checkout)
+        if workflow_choice == 0:
+            if checkout is None:
+                checkout = _checkout(repo)
+            if checkout:
+                config_path = _save_config(config_path, config, changed, checkout)
+                if changed and config_path.exists():
+                    markers["Config"] = "updated"
+                _workflows(repo, checkout, config_path)
+                changed = False
+    config_path = _save_config(config_path, config, changed, checkout)
+    if changed and config_path.exists():
+        markers["Config"] = "updated"
     print()
-    return check.run(repo, config_path)
+    return check.run(repo, config_path, markers=markers)
