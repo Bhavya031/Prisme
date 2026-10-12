@@ -254,6 +254,7 @@ def _secret(repo: str | None, name: str, value: str, repos: list[str] | None = N
             raise RuntimeError(f"could not save {name} in {target}: {_gh_reason(result.stderr, value)}")
     if local:
         local_env.save(name, value)
+        os.environ[name] = value
     print(f"Saved {name} " + ("as an Actions secret" if github else "to .env") + (" and .env." if github and local else "."))
 
 
