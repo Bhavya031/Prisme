@@ -272,10 +272,12 @@ def _save_config(path: Path, config: dict, changed: bool, checkout: Path | None,
     return path
 
 
-def _workflows(repo: str, checkout: Path, config_path: Path) -> None:
-    shared = config_path.resolve().is_relative_to(ROOT) and config_path.resolve() != (
-        checkout / ".github/prism.json").resolve()
-    config_name = config_path.resolve().relative_to(ROOT).as_posix() if shared else ""
+def _workflows(repo: str, checkout: Path, config_path: Path, remote: bool = False) -> None:
+    shared = config_path != Path(".github/prism.json") if remote else (
+        config_path.resolve().is_relative_to(ROOT) and config_path.resolve() !=
+        (checkout / ".github/prism.json").resolve())
+    config_name = config_path.as_posix() if remote and shared else (
+        config_path.resolve().relative_to(ROOT).as_posix() if shared else "")
     for name in ("prism-estimate.yml", "prism-cfo-allocation.yml"):
         target = checkout / ".github/workflows" / name
         if target.exists():
@@ -610,16 +612,20 @@ def run(repo: str | None, config_path: Path | None) -> bool:
             if checkout is None:
                 checkout = _checkout(repo)
             if checkout:
-                config_path = _save_config(config_path, config, changed, checkout)
-                if changed and config_path.exists():
-                    markers["Config"] = "updated"
-                    markers.update({name: "updated" for name in pending_updates})
-                _workflows(repo, checkout, config_path)
+                if not source.remote:
+                    config_path = _save_config(config_path, config, changed, checkout)
+                    if changed and config_path.exists():
+                        markers["Config"] = "updated"
+                        markers.update({name: "updated" for name in pending_updates})
+                _workflows(repo, checkout, config_path, remote=source.remote)
                 changed = False
-    config_path = _save_config(config_path, config, changed, checkout)
-    if changed and config_path.exists():
-        markers["Config"] = "updated"
-        markers.update({name: "updated" for name in pending_updates})
+    if source.remote and changed:
+        raise RuntimeError("Shared GitHub config cannot be saved from this checkout")
+    if not source.remote:
+        config_path = _save_config(config_path, config, changed, checkout)
+        if changed and config_path.exists():
+            markers["Config"] = "updated"
+            markers.update({name: "updated" for name in pending_updates})
     print()
     return check.run(repo, None if source.remote else config_path, markers=markers,
                      saved_entire=saved_entire)
