@@ -175,6 +175,16 @@ def _repo_name(value: str) -> str:
     return repo
 
 
+def _canonical_repo(repo: str) -> str:
+    try:
+        result = subprocess.run(["gh", "api", f"repos/{repo}", "--jq", ".full_name"],
+                                capture_output=True, text=True, timeout=15, env=check.gh_env())
+    except (OSError, subprocess.TimeoutExpired):
+        return repo
+    name = result.stdout.strip()
+    return name if not result.returncode and re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9_.-]+", name) else repo
+
+
 def _gh_reason(stderr: str, secret: str = "") -> str:
     line = next((line.strip() for line in stderr.splitlines() if line.strip()), "gh returned no details")
     if secret:
@@ -325,13 +335,14 @@ def run(repo: str | None, config_path: Path | None) -> bool:
     if github:
         _screen("GitHub repository", "Enter the repository that will run Prism.")
         repo = _repo_name(_input(f"Repository link{f' [{repo}]' if repo else ''}: ") or repo or "")
-        print(f"Repository: {repo}")
         repo = _verify_github(repo)
     elif repo:
-        repo = _repo_name(repo)
+        repo = _canonical_repo(_repo_name(repo))
     else:
         entered = _input("Repository for Entire search (owner/name, Enter to set later): ")
-        repo = _repo_name(entered) if entered else None
+        repo = _canonical_repo(_repo_name(entered)) if entered else None
+    if repo:
+        print(f"Repository: {repo}")
     if local:
         _warn_env_ignore()
         local_env.save("PRISM_LOCAL_SECRETS", "1")
