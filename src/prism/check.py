@@ -27,6 +27,12 @@ def paint(value: str, code: str) -> str:
     return value
 
 
+def link(url: str) -> str:
+    if sys.stdout.isatty() and "NO_COLOR" not in os.environ:
+        return f"\033]8;;{url}\033\\\033[1;94;4m{url}\033[0m\033]8;;\033\\"
+    return url
+
+
 def banner() -> None:
     print(paint(BANNER, "1;36"))
     print(paint("automated estimation and allocation", "1"))
@@ -231,10 +237,23 @@ def show(rows: list[tuple], repo: str, config_path: Path) -> bool:
             title, action, guide = fix
             print(paint(f"{index}. {name} — {title}", "1"))
             print(action)
-            print(guide)
+            print(link(guide))
             if index < len(blockers):
                 print()
+    summary(rows)
     return not blockers
+
+
+def summary(rows: list[tuple]) -> None:
+    missing = [(name, words) for name, _, state, words, _ in rows if state == "BLOCK"]
+    print("\n" + paint("─" * 60, "2"))
+    if missing:
+        count = len(missing)
+        print(status_text("BLOCK", f"{count} thing{'s' if count != 1 else ''} still missing:"))
+        for index, (name, words) in enumerate(missing, 1):
+            print(f"  {index}. {name} — {words}")
+    else:
+        print(status_text("PASS", "Ready to run"))
 
 
 def run(repo: str, config_path: Path) -> bool:

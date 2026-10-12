@@ -13,6 +13,7 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from . import check
 from .cfo_actions import MCP, TOKEN
 
 
@@ -149,7 +150,7 @@ def login(args):
             "nonce": secrets.token_urlsafe(32), "resource": MCP,
             "code_challenge": challenge, "code_challenge_method": "S256",
         })
-        print(f"Sign in to app.cfo.ai in this browser, then approve: {link}", flush=True)
+        print(f"Sign in to app.cfo.ai in this browser, then approve: {check.link(link)}", flush=True)
         try:
             webbrowser.open(link)
         except Exception:
