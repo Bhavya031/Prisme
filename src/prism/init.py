@@ -359,10 +359,7 @@ def run(repo: str | None, config_path: Path | None) -> bool:
         print(f"prism check --repo {repo or 'owner/name'} --config {config_path or '.github/prism.json'}")
         if repo or os.environ.get("PRISM_LOCAL_SECRETS") == "1":
             local_only = os.environ.get("PRISM_LOCAL_SECRETS") == "1"
-            check.summary(check.inspect(_repo_name(repo) if repo else None,
-                                        check.resolve_config(_repo_name(repo) if repo and not local_only else None,
-                                                             config_path),
-                                        local=local_only))
+            check.summary(check.inspect(_repo_name(repo) if repo else None, config_path, local=local_only))
         return True
 
     _screen("Where will Prism run?", "Choose where these credentials and setup files should go.")
@@ -387,9 +384,9 @@ def run(repo: str | None, config_path: Path | None) -> bool:
         if repo:
             local_env.save("GITHUB_REPOSITORY", repo)
 
-    config_path = check.resolve_config(repo if github else None, config_path)
     print()
-    rows = check.stream(repo, config_path, local=not github)
+    rows, source = check.stream(repo, config_path, local=not github)
+    config_path = source.path
     if sys.stdin.isatty():
         _input("Press Enter to continue setup...")
     markers = {}
@@ -414,7 +411,9 @@ def run(repo: str | None, config_path: Path | None) -> bool:
             rows = check.inspect(repo, config_path, local=not github)
         else:
             markers["Config"] = "skipped"
-    config = _read_config(config_path)
+    config = json.loads(json.dumps(source.data)) if source.data is not None else {"cfo": {}, "estimate": {}}
+    config.setdefault("cfo", {})
+    config.setdefault("estimate", {})
     if github:
         shared = config["cfo"].get("shared_login_repos", [])
         changed = False

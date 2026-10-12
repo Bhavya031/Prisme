@@ -8,7 +8,9 @@ import subprocess
 import sys
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 
 from . import cfo_actions, entire, glance, solve
@@ -76,23 +78,65 @@ def gh_env() -> dict:
     return env
 
 
-def resolve_config(repo: str | None, path: Path | None) -> Path:
-    if path is not None:
-        return path
-    default = Path(".github/prism.json")
-    if not repo or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
-        return default
+@dataclass
+class ConfigSource:
+    data: dict | None
+    path: Path
+    remote: bool
+    label: str
+
+
+def github_file(repo: str, path: str, ref: str | None = None) -> str | None:
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9_./-]+", path) or path.startswith("/") or ".." in path:
+        return None
+    endpoint = f"repos/{repo}/contents/{path}"
+    if ref:
+        if not re.fullmatch(r"[A-Za-z0-9_./-]+", ref) or ".." in ref:
+            return None
+        endpoint += "?ref=" + urllib.parse.quote(ref, safe="")
     try:
-        caller = subprocess.run(
+        result = subprocess.run(
             ["gh", "api", "-H", "Accept: application/vnd.github.raw",
-             f"repos/{repo}/contents/.github/workflows/prism-estimate.yml"],
+             endpoint],
             capture_output=True, text=True, timeout=TIMEOUT, env=gh_env())
     except (OSError, subprocess.TimeoutExpired):
-        return default
-    if caller.returncode == 0 and re.search(
-            r"(?m)^\s+config:\s*['\"]?configs/portfolio\.json['\"]?\s*(?:#.*)?$", caller.stdout):
-        return ROOT / "configs/portfolio.json"
-    return default
+        return None
+    return result.stdout if result.returncode == 0 else None
+
+
+def load_config(repo: str | None, path: Path | None, local: bool = False) -> ConfigSource:
+    if path is not None or local or not repo:
+        chosen = path or Path(".github/prism.json")
+        try:
+            raw = chosen.read_text()
+        except OSError:
+            raw = None
+        remote = False
+        label = str(chosen)
+    else:
+        caller = github_file(repo, ".github/workflows/prism-estimate.yml") or ""
+        match = re.search(r"(?m)^\s+config:\s*['\"]?([A-Za-z0-9_./-]+)['\"]?\s*(?:#.*)?$", caller)
+        if match:
+            shared = match.group(1)
+            ref_match = re.search(r"(?m)^\s+prisme_ref:\s*['\"]?([A-Za-z0-9_./-]+)['\"]?\s*(?:#.*)?$", caller)
+            ref = ref_match.group(1) if ref_match else "main"
+            raw = github_file("Bhavya031/Prisme", shared, ref)
+            chosen = ROOT / shared
+            label = f"Prisme {shared}@{ref}"
+        else:
+            raw = github_file(repo, ".github/prism.json")
+            chosen = Path(".github/prism.json")
+            label = f"{repo}/.github/prism.json"
+        remote = True
+    try:
+        data = json.loads(raw) if raw is not None else None
+    except ValueError:
+        data = None
+    if not isinstance(data, dict) or not isinstance(data.get("cfo", {}), dict) or not isinstance(data.get("estimate", {}), dict):
+        data = None
+    return ConfigSource(data, chosen, remote, label)
 
 
 def _get(url: str, headers: dict) -> None:
@@ -111,7 +155,19 @@ def _stored_secret(repo: str, name: str, token: str) -> bool:
         return False
 
 
-def inspect(repo: str | None, config_path: Path, on_start=None, on_row=None, local: bool = False) -> list[tuple]:
+def github_secret(repo: str, name: str) -> bool:
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+        return False
+    try:
+        result = subprocess.run(["gh", "api", f"repos/{repo}/actions/secrets/{name}"],
+                                capture_output=True, timeout=TIMEOUT, env=gh_env())
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
+
+
+def inspect(repo: str | None, config_path: Path | None, on_start=None, on_row=None, local: bool = False,
+            source: ConfigSource | None = None) -> list[tuple]:
     """Return (service, purpose, state, words, fix) without exposing credentials."""
     if (repo is None and not local) or (repo is not None and not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo)):
         raise ValueError("--repo must be owner/name")
@@ -122,15 +178,14 @@ def inspect(repo: str | None, config_path: Path, on_start=None, on_row=None, loc
         if on_row:
             on_row(rows[-1])
 
-    try:
-        config = json.loads(config_path.read_text())
-        if not isinstance(config, dict):
-            raise ValueError("config must be an object")
-    except (OSError, ValueError):
-        config = None
+    source = source or load_config(repo, config_path, local)
+    config = source.data
+    if config is None:
         row("Config", "Run settings", "BLOCK", "Config missing or unreadable",
-            ("create the config", f"Create {config_path} or choose one with --config.",
+            ("create the config", f"Create {source.label} or choose one with --config.",
              GUIDE + "configuration"))
+    else:
+        row("Config", "Run settings", "PASS", f"Loaded {source.label}")
 
     estimate = config.get("estimate") if config else None
     provider = estimate.get("provider") if isinstance(estimate, dict) else None
@@ -140,10 +195,13 @@ def inspect(repo: str | None, config_path: Path, on_start=None, on_row=None, loc
         on_start(model_name, "Predict files and estimate cost")
     key_name = {"openai": "OPENAI_API_KEY", "claude": "ANTHROPIC_API_KEY"}.get(provider)
     key_problem = None
+    stored_key = False
     if key_name is None:
         key_problem = "Provider not configured"
     elif not (key := os.getenv(key_name)):
-        key_problem = "Key missing"
+        stored_key = bool(not local and repo and github_secret(repo, key_name))
+        if not stored_key:
+            key_problem = "Key missing"
     else:
         url = "https://api.openai.com/v1/models" if provider == "openai" else "https://api.anthropic.com/v1/models"
         headers = {"Authorization": f"Bearer {key}"} if provider == "openai" else {
@@ -167,6 +225,9 @@ def inspect(repo: str | None, config_path: Path, on_start=None, on_row=None, loc
             action = "Choose a worker model with a built-in price."
         row(model_name, "Predict files and estimate cost", "BLOCK", words,
             ("complete model setup", action, GUIDE + ("how-to-get-model-key" if key_problem else "configuration")))
+    elif stored_key:
+        row(model_name, "Predict files and estimate cost", "WARN",
+            "Key stored on GitHub; cannot be read back to test; pricing passed")
     else:
         row(model_name, "Predict files and estimate cost", "PASS", "Key and pricing checks passed")
 
@@ -206,8 +267,8 @@ def inspect(repo: str | None, config_path: Path, on_start=None, on_row=None, loc
                       or not isinstance(cfo.get(key), str) or not cfo[key]]
     pending = config is not None and '"PENDING"' in json.dumps(config)
     writer = os.getenv("CFO_SECRET_WRITE_TOKEN")
-    stored_client = bool(not local and writer and _stored_secret(repo, "CFO_OAUTH_CLIENT_ID", writer))
-    stored_refresh = bool(not local and writer and _stored_secret(repo, "CFO_OAUTH_REFRESH_TOKEN", writer))
+    stored_client = bool(not local and github_secret(repo, "CFO_OAUTH_CLIENT_ID"))
+    stored_refresh = bool(not local and github_secret(repo, "CFO_OAUTH_REFRESH_TOKEN"))
     client_id = bool(os.getenv("CFO_OAUTH_CLIENT_ID")) or stored_client
     sign_in_missing = not client_id or (local and not os.getenv("CFO_OAUTH_REFRESH_TOKEN"))
     if missing_config or pending or sign_in_missing:
@@ -235,9 +296,13 @@ def inspect(repo: str | None, config_path: Path, on_start=None, on_row=None, loc
             ("fix shared repositories", f"List each shared repository once and include {repo}.",
              GUIDE + "configuration"))
     elif not writer:
-        row("GitHub", "Repository access and secret updates", "BLOCK", "Secret-write token missing",
-            ("add a secret-write token", "Save CFO_SECRET_WRITE_TOKEN for every shared repository.",
-             GUIDE + "how-to-get-github-token"))
+        if github_secret(repo, "CFO_SECRET_WRITE_TOKEN"):
+            row("GitHub", "Repository access and secret updates", "WARN",
+                "Secret-write token stored on GitHub; write access untested")
+        else:
+            row("GitHub", "Repository access and secret updates", "BLOCK", "Secret-write token missing",
+                ("add a secret-write token", "Save CFO_SECRET_WRITE_TOKEN for every shared repository.",
+                 GUIDE + "how-to-get-github-token"))
     else:
         for target in repos:
             try:
@@ -277,29 +342,24 @@ def _header(repo: str) -> None:
     print(paint(f"{'Service':<17} | {'Purpose':<37} | Status", "1"))
 
 
-def _print_row(row: tuple, config_path: Path, marker: str | None = None) -> None:
+def _print_row(row: tuple, source: ConfigSource, marker: str | None = None) -> None:
     name, purpose, state, words, _ = row
     code = {"PASS": "1;32", "BLOCK": "1;31", "WARN": "1;33", "MISSING": "1;90"}[state]
     note = f" {paint('· ' + marker, '2')}" if marker else ""
     print(f"{paint(f'{name:<17}', code)} | {purpose:<37} | {status_text(state, words)}{note}")
     if name in ("OpenAI", "Anthropic", "Model provider"):
-        try:
-            model = json.loads(config_path.read_text()).get("estimate", {}).get("worker_model")
-        except (OSError, ValueError, AttributeError):
-            model = None
+        estimate = (source.data or {}).get("estimate")
+        model = estimate.get("worker_model") if isinstance(estimate, dict) else None
         print(f"  {paint(str(model or 'No model selected'), '2')}")
 
 
-def show(rows: list[tuple], repo: str, config_path: Path, streamed: bool = False) -> bool:
+def show(rows: list[tuple], repo: str, source: ConfigSource, streamed: bool = False) -> bool:
     blockers = [name for name, _, state, _, _ in rows if state == "BLOCK"]
     if not streamed:
         _header(repo)
         for row in rows:
-            _print_row(row, config_path)
-    try:
-        estimate = json.loads(config_path.read_text()).get("estimate", {})
-    except (OSError, ValueError, AttributeError):
-        estimate = {}
+            _print_row(row, source)
+    estimate = (source.data or {}).get("estimate", {})
     if not isinstance(estimate, dict):
         estimate = {}
     provider = {"openai": "OpenAI", "claude": "Anthropic"}.get(estimate.get("provider"), "Not set")
@@ -334,9 +394,10 @@ def summary(rows: list[tuple]) -> None:
         print(status_text("PASS", "Ready to run"))
 
 
-def stream(repo: str | None, config_path: Path, local: bool = False,
-           markers: dict[str, str] | None = None) -> list[tuple]:
+def stream(repo: str | None, config_path: Path | None, local: bool = False,
+           markers: dict[str, str] | None = None) -> tuple[list[tuple], ConfigSource]:
     _header(repo)
+    source = load_config(repo, config_path, local)
     spinning = sys.stdout.isatty()
     stopped = threading.Event()
     thread = None
@@ -365,19 +426,18 @@ def stream(repo: str | None, config_path: Path, local: bool = False,
             sys.stdout.write("\r\033[2K")
         name = "Model provider" if row[0] in ("OpenAI", "Anthropic", "Model provider") else row[0]
         default = "checked" if row[2] == "PASS" or (name == "GitHub" and row[2] == "WARN") else "skipped"
-        _print_row(row, config_path, markers.get(name, default) if markers is not None else None)
+        _print_row(row, source, markers.get(name, default) if markers is not None else None)
 
     try:
-        rows = inspect(repo, config_path, start, done, local=local)
+        rows = inspect(repo, config_path, start, done, local=local, source=source)
     finally:
         stopped.set()
         if thread:
             thread.join()
-    return rows
+    return rows, source
 
 
 def run(repo: str | None, config_path: Path | None, local: bool = False,
         markers: dict[str, str] | None = None) -> bool:
-    config_path = resolve_config(repo if not local else None, config_path)
-    rows = stream(repo, config_path, local, markers)
-    return show(rows, repo, config_path, streamed=True)
+    rows, source = stream(repo, config_path, local, markers)
+    return show(rows, repo, source, streamed=True)
