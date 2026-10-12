@@ -183,5 +183,6 @@ def login(args):
             _set_secret(repo, "CFO_OAUTH_REFRESH_TOKEN", refresh_token)
         except RuntimeError as error:
             raise RuntimeError(f"{error}; a new sign-in is needed") from None
-    print("CFO.ai login saved to all requested repositories.", flush=True)
+    if args.repo:
+        print("CFO.ai login saved to all requested repositories.", flush=True)
     return client_id, refresh_token

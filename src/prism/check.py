@@ -75,9 +75,9 @@ def _stored_secret(repo: str, name: str, token: str) -> bool:
         return False
 
 
-def inspect(repo: str, config_path: Path, on_start=None, on_row=None) -> list[tuple]:
+def inspect(repo: str | None, config_path: Path, on_start=None, on_row=None, local: bool = False) -> list[tuple]:
     """Return (service, purpose, state, words, fix) without exposing credentials."""
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+    if (repo is None and not local) or (repo is not None and not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo)):
         raise ValueError("--repo must be owner/name")
     rows = []
 
@@ -136,7 +136,11 @@ def inspect(repo: str, config_path: Path, on_start=None, on_row=None) -> list[tu
 
     if on_start:
         on_start("Entire", "Search repository")
-    if not os.getenv("ENTIRE_TOKEN"):
+    if not repo:
+        row("Entire", "Search repository", "BLOCK", "Repository needed for Entire check",
+            ("name the repository", "Run prism init with --repo owner/name to check Entire readiness.",
+             GUIDE + "how-to-get-entire"))
+    elif not os.getenv("ENTIRE_TOKEN"):
         row("Entire", "Search repository", "BLOCK", "Token missing",
             ("add your token", "Run entire login, then save the result of entire auth token as ENTIRE_TOKEN.",
              GUIDE + "how-to-get-entire"))
@@ -166,13 +170,14 @@ def inspect(repo: str, config_path: Path, on_start=None, on_row=None) -> list[tu
                       or not isinstance(cfo.get(key), str) or not cfo[key]]
     pending = config is not None and '"PENDING"' in json.dumps(config)
     writer = os.getenv("CFO_SECRET_WRITE_TOKEN")
-    stored_client = bool(writer and _stored_secret(repo, "CFO_OAUTH_CLIENT_ID", writer))
-    stored_refresh = bool(writer and _stored_secret(repo, "CFO_OAUTH_REFRESH_TOKEN", writer))
+    stored_client = bool(not local and writer and _stored_secret(repo, "CFO_OAUTH_CLIENT_ID", writer))
+    stored_refresh = bool(not local and writer and _stored_secret(repo, "CFO_OAUTH_REFRESH_TOKEN", writer))
     client_id = bool(os.getenv("CFO_OAUTH_CLIENT_ID")) or stored_client
-    if missing_config or pending or not client_id:
-        words = ("Sign-in required" if not client_id else "Config incomplete")
+    sign_in_missing = not client_id or (local and not os.getenv("CFO_OAUTH_REFRESH_TOKEN"))
+    if missing_config or pending or sign_in_missing:
+        words = ("Sign-in required" if sign_in_missing else "Config incomplete")
         if missing_config or pending:
-            words += "; config incomplete" if not client_id else ""
+            words += "; config incomplete" if sign_in_missing else ""
         row("CFO.ai", "Allocate budget", "BLOCK", words,
             ("complete sign-in and tables", "Complete the CFO.ai table settings and run prism cfo-login.",
              GUIDE + "how-to-get-cfo-ai"))
@@ -184,7 +189,9 @@ def inspect(repo: str, config_path: Path, on_start=None, on_row=None) -> list[tu
     if on_start:
         on_start("GitHub", "Repository access and secret updates")
     repos = cfo.get("shared_login_repos", [repo]) if isinstance(cfo, dict) else None
-    if (not isinstance(repos, list) or not repos or repo not in repos
+    if local:
+        row("GitHub", "Repository access and secret updates", "MISSING", "Local setup; Actions secrets not used")
+    elif (not isinstance(repos, list) or not repos or repo not in repos
             or any(not isinstance(item, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", item) for item in repos)
             or len(repos) != len(set(repos))):
         row("GitHub", "Repository access and secret updates", "BLOCK", "Shared repository list invalid",
@@ -228,7 +235,7 @@ def _header(repo: str) -> None:
     banner()
     print()
     print(paint("Setup check", "1"))
-    print(f"Repository: {repo}")
+    print(f"Repository: {repo or 'Not set'}")
     print()
     print(paint(f"{'Service':<17} | {'Purpose':<37} | Status", "1"))
 
@@ -289,7 +296,7 @@ def summary(rows: list[tuple]) -> None:
         print(status_text("PASS", "Ready to run"))
 
 
-def run(repo: str, config_path: Path) -> bool:
+def run(repo: str | None, config_path: Path, local: bool = False) -> bool:
     _header(repo)
     spinning = sys.stdout.isatty()
     stopped = threading.Event()
@@ -320,7 +327,7 @@ def run(repo: str, config_path: Path) -> bool:
         _print_row(row, config_path)
 
     try:
-        rows = inspect(repo, config_path, start, done)
+        rows = inspect(repo, config_path, start, done, local=local)
     finally:
         stopped.set()
         if thread:

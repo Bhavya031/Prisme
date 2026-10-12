@@ -16,11 +16,11 @@ def parser() -> argparse.ArgumentParser:
     commands = command_parser.add_subparsers(dest="command", required=True)
 
     check = commands.add_parser("check", help="check run credentials without model calls or secret writes")
-    check.add_argument("--repo", required=True, help="target repository, owner/name")
+    check.add_argument("--repo", help="target repository, owner/name (optional for local setup)")
     check.add_argument("--config", type=Path, default=Path(".github/prism.json"), help="Prism JSON config")
 
     init = commands.add_parser("init", help="set up missing credentials and caller workflows interactively")
-    init.add_argument("--repo", required=True, help="target repository, owner/name")
+    init.add_argument("--repo", help="target repository, owner/name or GitHub URL")
     init.add_argument("--config", type=Path, default=Path(".github/prism.json"), help="Prism JSON config")
 
     predict = commands.add_parser("predict")
@@ -400,7 +400,7 @@ def main(argv=None) -> None:
         from . import check
 
         try:
-            passed = check.run(args.repo, args.config)
+            passed = check.run(args.repo, args.config, local=os.environ.get("PRISM_LOCAL_SECRETS") == "1")
         except ValueError as error:
             raise SystemExit(f"prism check: {error}") from None
         if not passed:

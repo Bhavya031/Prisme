@@ -46,18 +46,23 @@ def refresh_access_token():
     client_id = os.environ.get("CFO_OAUTH_CLIENT_ID")
     refresh_token = os.environ.get("CFO_OAUTH_REFRESH_TOKEN")
     writer = os.environ.get("CFO_SECRET_WRITE_TOKEN")
-    if not all((client_id, refresh_token, writer)):
-        raise RuntimeError("CFO_OAUTH_CLIENT_ID, CFO_OAUTH_REFRESH_TOKEN, and CFO_SECRET_WRITE_TOKEN are required")
+    local = os.environ.get("PRISM_LOCAL_SECRETS") == "1"
+    if not all((client_id, refresh_token)) or (not local and not writer):
+        raise RuntimeError("CFO_OAUTH_CLIENT_ID and CFO_OAUTH_REFRESH_TOKEN are required; Actions also needs CFO_SECRET_WRITE_TOKEN")
     env = os.environ.copy()
-    env["GH_TOKEN"] = writer
-    # Prove writes to every repository before rotating the only stored refresh token.
-    for repository in repositories:
-        preflight = subprocess.run(
-            ["gh", "secret", "set", "CFO_SECRET_WRITE_TOKEN", "--repo", repository],
-            input=writer, text=True, capture_output=True, env=env,
-        )
-        if preflight.returncode:
-            raise RuntimeError(f"CFO secret-write token cannot update {repository} Actions secrets; OAuth refresh was not attempted (gh exit {preflight.returncode})")
+    if local:
+        from .local_env import save
+        save("CFO_OAUTH_REFRESH_TOKEN", refresh_token)
+    else:
+        env["GH_TOKEN"] = writer
+        # Prove writes to every repository before rotating the only stored refresh token.
+        for repository in repositories:
+            preflight = subprocess.run(
+                ["gh", "secret", "set", "CFO_SECRET_WRITE_TOKEN", "--repo", repository],
+                input=writer, text=True, capture_output=True, env=env,
+            )
+            if preflight.returncode:
+                raise RuntimeError(f"CFO secret-write token cannot update {repository} Actions secrets; OAuth refresh was not attempted (gh exit {preflight.returncode})")
     payload = urllib.parse.urlencode({
         "grant_type": "refresh_token", "client_id": client_id, "refresh_token": refresh_token,
     }).encode()
@@ -74,16 +79,19 @@ def refresh_access_token():
     if not result.get("access_token") or not result.get("refresh_token"):
         raise RuntimeError("CFO OAuth refresh returned no access or refresh token")
     # shortcut: cross-repository runs can race, schedule one at a time until a shared lock exists.
-    for repository in repositories:
-        for attempt in range(3):
-            saved = subprocess.run(
-                ["gh", "secret", "set", "CFO_OAUTH_REFRESH_TOKEN", "--repo", repository],
-                input=result["refresh_token"], text=True, capture_output=True, env=env,
-            )
-            if saved.returncode == 0:
-                break
-        else:
-            raise RuntimeError(f"CFO refresh succeeded but the rotated credential could not be saved to {repository} Actions secrets; repositories may now hold different tokens; reauthorization may be required (gh exit {saved.returncode})")
+    if local:
+        save("CFO_OAUTH_REFRESH_TOKEN", result["refresh_token"])
+    else:
+        for repository in repositories:
+            for attempt in range(3):
+                saved = subprocess.run(
+                    ["gh", "secret", "set", "CFO_OAUTH_REFRESH_TOKEN", "--repo", repository],
+                    input=result["refresh_token"], text=True, capture_output=True, env=env,
+                )
+                if saved.returncode == 0:
+                    break
+            else:
+                raise RuntimeError(f"CFO refresh succeeded but the rotated credential could not be saved to {repository} Actions secrets; repositories may now hold different tokens; reauthorization may be required (gh exit {saved.returncode})")
     return result["access_token"]
 
 
