@@ -154,6 +154,8 @@ Prism is a Python CLI with example GitHub Actions workflows. An eligible issue o
 
 ## How it works
 
+![How Prism works](docs/assets/prism-flow.svg)
+
 ```mermaid
 flowchart TD
     A[Issue opened or /prism estimate comment] --> B[Acknowledge with eyes reaction]
