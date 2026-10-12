@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="690" viewBox="0 0 1200 690" role="img" aria-labelledby="t d">
+<title id="t">How Prism works</title>
+<desc id="d">Without Prism, an issue goes straight to an agent run and the cost shows up afterwards. With Prism, a GitHub issue or /prism estimate comment passes four stages: Gate (pin the source commit; check authorization, duplicates and cooldown), Estimate (SCOPE files, USAGE tokens, COST in USD), Decide (predicted tokens go to a CFO.ai budget rule and Prism sanity-checks the result) and Reserve (a new approved request books a reservation row through CFO.ai; otherwise nothing is booked). The issue gets an estimate comment and an allocation table with models and a requester mention.</desc>
+<style>
+  text{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",system-ui,sans-serif;fill:#2A251F}
+  .mono{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+  .eyebrow{font-size:17px;fill:#6E655A}
+  .h1{font-size:34px;font-weight:600;letter-spacing:-.02em}
+  .label{font-size:13px;font-weight:600;letter-spacing:.08em;fill:#6E655A}
+  .t{font-size:17px;font-weight:600}
+  .b{font-size:15px;fill:#4A4238}
+  .m{font-size:15px;fill:#6E655A}
+  .s{font-size:13px;fill:#6E655A}
+  .card{fill:#FFFDF9;stroke:#E6DED2;stroke-width:1.5}
+  .hl{animation:hl 7s ease-in-out infinite}
+  .d1{animation-delay:1s}.d2{animation-delay:2s}.d3{animation-delay:3s}.d3b{animation-delay:3.3s}.d4{animation-delay:4s}.d4b{animation-delay:4.3s}
+  .res{animation:res 7s ease-in-out infinite;animation-delay:5s}
+  .wire{stroke:#B9AE9F;stroke-width:2;fill:none}
+  .flow{stroke:#2F7FC1;stroke-width:2.5;fill:none;stroke-dasharray:4 9;opacity:0;animation:flow 1.1s linear infinite,show 7s ease-in-out infinite}
+  .f3{animation-delay:0s,3s}.f4{animation-delay:0s,4s}
+  @keyframes hl{0%{fill:#FFFDF9;stroke:#E6DED2}4%,13%{fill:#E3EEF7;stroke:#2A6FA8}19%,100%{fill:#FFFDF9;stroke:#E6DED2}}
+  @keyframes res{0%{fill:#FFFDF9;stroke:#E6DED2}5%,26%{fill:#E3EEF7;stroke:#2A6FA8}32%,100%{fill:#FFFDF9;stroke:#E6DED2}}
+  @keyframes flow{to{stroke-dashoffset:-26}}
+  @keyframes show{0%{opacity:0}4%,13%{opacity:1}19%,100%{opacity:0}}
+  @media (prefers-reduced-motion:reduce){.hl,.res,.flow{animation:none}}
+</style>
+<defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1 9 5 1 9" fill="none" stroke="#B9AE9F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  <marker id="ahm" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1 9 5 1 9" fill="none" stroke="#B5A796" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  <symbol id="ok" viewBox="0 0 20 20"><path d="M4 10.5l3.5 3.5L16 6" fill="none" stroke="#2A6FA8" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</defs>
+
+<rect x="1" y="1" width="1198" height="688" rx="28" fill="#FBF8F2" stroke="#E5DDD0" stroke-width="1.5"/>
+
+<text x="48" y="66" class="eyebrow">Prism</text>
+<text x="48" y="108" class="h1">Every issue gets a price and a budget decision before an agent runs.</text>
+
+<!-- Problem -->
+<rect x="48" y="138" width="1104" height="84" rx="20" fill="#F2ECE2"/>
+<text x="76" y="186" class="label">WITHOUT PRISM</text>
+<rect x="220" y="162" width="96" height="36" rx="10" fill="#FBF8F2" stroke="#E2D9CC" stroke-width="1.5"/>
+<text x="268" y="186" class="m" text-anchor="middle">Issue</text>
+<path d="M326 180H352" stroke="#B5A796" stroke-width="2" marker-end="url(#ahm)"/>
+<rect x="362" y="162" width="132" height="36" rx="10" fill="#FBF8F2" stroke="#E2D9CC" stroke-width="1.5"/>
+<text x="428" y="186" class="m" text-anchor="middle">Agent runs</text>
+<path d="M504 180H530" stroke="#B5A796" stroke-width="2" marker-end="url(#ahm)"/>
+<rect x="540" y="162" width="218" height="36" rx="10" fill="#FBF8F2" stroke="#E2D9CC" stroke-width="1.5"/>
+<path d="M556 174l12 12M568 174l-12 12" stroke="#8C5A3C" stroke-width="2.2" stroke-linecap="round"/>
+<text x="580" y="186" class="m">Cost shows up after</text>
+<text x="1124" y="186" class="m" text-anchor="end">No estimate · no budget check · no record</text>
+
+<text x="48" y="276" class="label">WITH PRISM</text>
+
+<!-- CFO.ai -->
+<rect class="card hl d3b" x="584" y="290" width="322" height="70" rx="16"/>
+<text x="606" y="321" class="t">CFO.ai</text>
+<text x="606" y="344" class="s">Budget rules · decision test · reservations</text>
+
+<!-- Issue -->
+<rect class="card hl" x="48" y="468" width="152" height="134" rx="18"/>
+<text x="66" y="502" class="t">GitHub issue</text>
+<text x="66" y="534" class="m">opened, or a</text>
+<text x="66" y="560" class="mono" font-size="14" style="fill:#2A6FA8">/prism estimate</text>
+<text x="66" y="582" class="s">comment</text>
+
+<path class="wire" d="M204 535H224" marker-end="url(#ah)"/>
+
+<!-- Prism container -->
+<rect x="230" y="398" width="698" height="240" rx="24" fill="#FFFDF9" stroke="#E6DED2" stroke-width="1.5"/>
+<rect x="252" y="414" width="94" height="32" rx="16" fill="#2A6FA8"/>
+<text x="299" y="436" text-anchor="middle" font-size="17" font-weight="600" style="fill:#FFFFFF">Prism</text>
+
+<!-- CFO.ai links, drawn over the container edge -->
+<path class="wire" d="M662 364V456" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<path class="flow f3" d="M662 368V452"/>
+<text x="672" y="388" class="s">decision</text>
+<path class="wire" d="M828 364V456" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<path class="flow f4" d="M828 368V452"/>
+<text x="838" y="388" class="s">reservation row</text>
+
+<!-- stages -->
+<rect class="card hl d1" x="252" y="462" width="156" height="154" rx="16"/>
+<text x="270" y="494" class="t">1 · Gate</text>
+<text x="270" y="526" class="b">Pin source</text>
+<text x="270" y="546" class="b">commit</text>
+<text x="270" y="576" class="m">Auth, duplicates,</text>
+<text x="270" y="596" class="m">cooldown</text>
+
+<path class="wire" d="M408 539H418"/>
+
+<rect class="card hl d2" x="418" y="462" width="156" height="154" rx="16"/>
+<text x="436" y="494" class="t">2 · Estimate</text>
+<text x="436" y="532" class="b"><tspan font-weight="600" style="fill:#2A6FA8">SCOPE</tspan> files</text>
+<text x="436" y="562" class="b"><tspan font-weight="600" style="fill:#2A6FA8">USAGE</tspan> tokens</text>
+<text x="436" y="592" class="b"><tspan font-weight="600" style="fill:#2A6FA8">COST</tspan> USD</text>
+
+<path class="wire" d="M574 539H584"/>
+
+<rect class="card hl d3" x="584" y="462" width="156" height="154" rx="16"/>
+<text x="602" y="494" class="t">3 · Decide</text>
+<text x="602" y="526" class="b">Predicted tokens</text>
+<text x="602" y="546" class="b">to budget rule</text>
+<text x="602" y="576" class="m">Prism sanity-</text>
+<text x="602" y="596" class="m">checks result</text>
+
+<path class="wire" d="M740 539H750"/>
+
+<rect class="card hl d4" x="750" y="462" width="156" height="154" rx="16"/>
+<text x="768" y="494" class="t">4 · Reserve</text>
+<text x="768" y="526" class="b">New + approved:</text>
+<text x="768" y="546" class="b">book the budget</text>
+<text x="768" y="576" class="m">Otherwise:</text>
+<text x="768" y="596" class="m">nothing booked</text>
+
+<path class="wire" d="M932 535H954" marker-end="url(#ah)"/>
+
+<!-- Result -->
+<rect class="card res" x="960" y="452" width="192" height="166" rx="18"/>
+<text x="980" y="488" class="t">On the issue</text>
+<use href="#ok" x="976" y="507" width="16" height="16"/>
+<text x="998" y="521" class="b">Estimate comment</text>
+<use href="#ok" x="976" y="539" width="16" height="16"/>
+<text x="998" y="553" class="b">Allocation table</text>
+<use href="#ok" x="976" y="571" width="16" height="16"/>
+<text x="998" y="585" class="b">Models, @requester</text>
+
+<text x="48" y="666" class="s">Every step runs against one pinned commit, so the estimate, the decision and the reservation all describe the same code.</text>
+</svg>

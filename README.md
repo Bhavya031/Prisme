@@ -1,5 +1,7 @@
 # Prism
 
+![Prism: automated estimation and allocation](docs/assets/prism-poster.webp)
+
 A prism splits one beam into its parts. **Prism** takes one GitHub issue and shows three sides before a coding worker starts: **scope** (the existing files likely to change), **usage** (predicted tokens), and **cost** (a USD estimate followed by a budget-rule allocation). It provides automated estimation and allocation; it does not implement the issue.
 
 ## Install
@@ -152,23 +154,7 @@ Prism is a Python CLI with example GitHub Actions workflows. An eligible issue o
 
 ## How it works
 
-```mermaid
-flowchart TD
-    A[Issue opened or /prism estimate comment] --> B[Acknowledge with eyes reaction]
-    A --> C[Pin one source commit]
-    C --> D[Check authorization, duplicates, and cooldown]
-    D --> E[Search repository and predict existing files: SCOPE]
-    E --> F[Count selected context and project run tokens: USAGE]
-    F --> G[Price token estimates in USD: COST]
-    G --> H[Post estimate comment on issue]
-    H --> I[Write or reuse predicted-token inputs in CFO.ai decision test]
-    I --> J[Read saved budget rule result]
-    J --> K[Prism sanity-checks decision, model, amount, reason]
-    K --> L[Check request ID against existing reservations]
-    L -->|new approved request| M[Write reservation row through CFO.ai model tools]
-    M --> N[Post allocation table, models, and requester mention]
-    L -->|blocked or already recorded| N
-```
+![How Prism works](docs/assets/prism-flow.svg)
 
 1. The example workflow reacts to new issues and exact `/prism estimate` comments from repository owners, members, or collaborators. A separate job adds 👀. The estimate job pins the default branch commit (or a maintainer-set replay ref), then checks duplicate requests and a repository-wide cooldown before model calls.
 2. **Scope:** a model searches the ready Entire mirror for a live issue and predicts existing file paths. A replay searches Git at the pinned commit. Prism reads selected file contents from that commit.
@@ -193,6 +179,22 @@ flowchart TD
 ## Results
 
 In a benchmark of 15 real open-source issues, Claude Sonnet found 73% of fix files on average (71% precision; 5 of 15 exact file sets). OpenAI GPT-6 Sol found 83% (62% precision; 3 of 15 exact). Estimated file-discovery cost was about $0.71 total for 60 model calls. This run used direct Git search at each pinned pre-merge commit, not Entire search. It measures file prediction only, not cost-estimate accuracy or completed fixes.
+
+## Evidence: real runs
+
+Each issue below has both Prism comments: the estimate with predicted files and the budget allocation.
+
+| Repo | Issue |
+|---|---|
+| Bhavya031/flask | [#5 Raise error when blueprint name contains a dot](https://github.com/Bhavya031/flask/issues/5) |
+| Bhavya031/werkzeug | [#5 ProxyFix should not set SERVER_NAME or SERVER_PORT](https://github.com/Bhavya031/werkzeug/issues/5) |
+| Bhavya031/markupsafe | [#1 escape() fails with certain str subclasses](https://github.com/Bhavya031/markupsafe/issues/1) |
+| Bhavya031/itsdangerous | [#1 URLSafeSerializer.dumps may return bytes](https://github.com/Bhavya031/itsdangerous/issues/1) |
+| Bhavya031/quart | [#1 App appends :5000 to the name of a socket file](https://github.com/Bhavya031/quart/issues/1) |
+| Bhavya031/k-2 | [#48 Trim surrounding whitespace in offline report search](https://github.com/Bhavya031/k-2/issues/48) |
+| Bhavya031/k-2 | [#47 Show document page numbers on offline report exceptions](https://github.com/Bhavya031/k-2/issues/47) |
+
+The open-source forks already contain the upstream fixes, so these show the workflow end to end; the accuracy numbers come from the 15-issue benchmark above.
 
 ## CFO.ai data boundary
 
