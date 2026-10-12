@@ -15,8 +15,8 @@ These secrets are passed explicitly by the caller workflows. Set them in the **t
 | `NEATLOGS_API_KEY` | Sends prediction traces to Neatlogs. | Neatlogs account; issuance steps are not documented in code. | No. Press Enter to skip. |
 | `ENTIRE_TOKEN` | Entire credential for searching the indexed target repository. | Log in to Entire in the region containing the mirror and create a token there; the exact issuance flow is not documented in code. | Yes. |
 | `PRISME_READ_TOKEN` | GitHub token that can read private `Bhavya031/Prisme`, used by install and checkout. | GitHub personal access token with Prisme Contents read permission. | Only while Prisme is private. |
-| `CFO_OAUTH_CLIENT_ID` | CFO.ai OAuth client ID used with the refresh token. | CFO.ai OAuth registration; obtaining it is not documented in code. | Yes for allocation. |
-| `CFO_OAUTH_REFRESH_TOKEN` | Rotating CFO.ai OAuth refresh token. | CFO.ai browser authorization; obtaining it is not documented in code. | Yes for allocation. |
+| `CFO_OAUTH_CLIENT_ID` | CFO.ai OAuth client ID used with the refresh token. | `prism cfo-login` below. | Yes for allocation. |
+| `CFO_OAUTH_REFRESH_TOKEN` | Rotating CFO.ai OAuth refresh token. | `prism cfo-login` below. | Yes for allocation. |
 | `CFO_SECRET_WRITE_TOKEN` | Separate GitHub token used to update the target repository's Actions secrets after CFO.ai rotates the refresh token. | GitHub personal access token with **Secrets: Read and write** permission in every repository sharing the login; token creation steps are not documented in code. | Yes for allocation. |
 
 ## Configuration
@@ -60,6 +60,8 @@ The request table uses row dimension `<prefix>request ID`, followed by these col
 For the portfolio budget table, the supplied schema is row dimension `Portfolio budget record` with columns `Portfolio budget repository`, `Portfolio budget USD`, `Portfolio spending USD`, `Portfolio existing reservations USD`, and `Portfolio max budget fraction`. These names and the saved rule's connection to them must be confirmed in CFO.ai because Prism does not inspect that table. The old K2 budget row dimension and columns cannot be confirmed from code; only its decision and request names were encoded there.
 
 ## CFO.ai sign-in and secret rotation
+
+For the first sign-in, run `prism cfo-login --repo owner/name` (repeat `--repo` for every repository sharing the login), then approve once in your browser while signed in to app.cfo.ai. The command checks Actions secret writes first, registers a public OAuth client, and saves `CFO_OAUTH_CLIENT_ID` and `CFO_OAUTH_REFRESH_TOKEN` as Actions secrets in each named repository. It prints the public client ID and sign-in link, never the refresh token. For an existing public client, use `--client-id ID --port PORT` with its registered loopback port. The callback wait defaults to five minutes; change it with `--timeout SECONDS`. Prism renews and saves the rotating refresh token on every allocation run after that.
 
 The CFO.ai refresh token rotates on every use. Before OAuth, each allocation workflow reads its selected Prism config, checks the Actions secret public key, and writes the harmless `CFO_SECRET_WRITE_PREFLIGHT` secret in every listed repository. The code also rewrites `CFO_SECRET_WRITE_TOKEN` with itself in each repository before refresh. Only after those writes succeed does it exchange `CFO_OAUTH_REFRESH_TOKEN`, save the replacement to every listed repository, and use the access token. If any save fails, allocation stops and names the repository; repositories may then hold different tokens and browser reauthorization may be required. The write token needs **Secrets: Read and write** permission in every listed repository. Run only one allocation at a time across repositories sharing a login: the `prism-cfo-allocation` concurrency group serializes runs inside one repository, not across repositories.
 

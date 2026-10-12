@@ -43,6 +43,12 @@ def parser() -> argparse.ArgumentParser:
                            help="stage name for the runs.json export (default: run-<run id>)")
     commands.add_parser("dry-run").add_argument("--manifest", type=Path, default=MANIFEST)
 
+    cfo_login = commands.add_parser("cfo-login", help="sign in to CFO.ai and save GitHub Actions secrets")
+    cfo_login.add_argument("--repo", action="append", required=True, metavar="OWNER/NAME")
+    cfo_login.add_argument("--client-id", help="existing public OAuth client ID; requires --port")
+    cfo_login.add_argument("--port", type=int, help="registered loopback port for --client-id")
+    cfo_login.add_argument("--timeout", type=int, default=300, metavar="SECONDS")
+
     cost = commands.add_parser("cost", help="estimated file-discovery USD per model from a saved run or a predict JSON "
                                             "output; not the cost of solving an issue (see solve-estimate)")
     cost.add_argument("--results", type=Path, required=True,
@@ -362,6 +368,13 @@ def _issue(args) -> None:
 
 def main(argv=None) -> None:
     args = parser().parse_args(argv)
+    if args.command == "cfo-login":
+        from .cfo_login import login
+        try:
+            login(args)
+        except (OSError, RuntimeError, ValueError) as error:
+            raise SystemExit(f"prism cfo-login: {error}") from None
+        return
     _load_env()
     if args.command.startswith("issue-"):
         _issue(args)
