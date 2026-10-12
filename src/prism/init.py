@@ -587,8 +587,13 @@ def run(repo: str | None, config_path: Path | None) -> bool:
     if _row(rows, "Glance")[2] == "MISSING":
         markers["Glance"] = "skipped"
 
-    complete = bool(checkout and all((checkout / ".github/workflows" / name).exists()
-                                     for name in ("prism-estimate.yml", "prism-cfo-allocation.yml")))
+    workflow_names = ("prism-estimate.yml", "prism-cfo-allocation.yml")
+    found = [name for name in workflow_names if github and
+             check.github_file(repo, f".github/workflows/{name}") is not None]
+    for name in found:
+        print(f"Already present on GitHub: .github/workflows/{name}")
+    complete = len(found) == len(workflow_names) or bool(checkout and all(
+        (checkout / ".github/workflows" / name).exists() for name in workflow_names))
     if not github:
         config_path = _save_config(config_path, config, changed, checkout, local=True)
         if changed and config_path.exists():
