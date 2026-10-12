@@ -15,6 +15,10 @@ def parser() -> argparse.ArgumentParser:
     command_parser = argparse.ArgumentParser(prog="prism")
     commands = command_parser.add_subparsers(dest="command", required=True)
 
+    check = commands.add_parser("check", help="check run credentials without model calls or secret writes")
+    check.add_argument("--repo", required=True, help="target repository, owner/name")
+    check.add_argument("--config", type=Path, default=Path(".github/prism.json"), help="Prism JSON config")
+
     predict = commands.add_parser("predict")
     predict.add_argument("issue_url")
     predict.add_argument("--repo", required=True)
@@ -363,6 +367,16 @@ def _issue(args) -> None:
 def main(argv=None) -> None:
     args = parser().parse_args(argv)
     _load_env()
+    if args.command == "check":
+        from . import check
+
+        try:
+            passed = check.run(args.repo, args.config)
+        except ValueError as error:
+            raise SystemExit(f"prism check: {error}") from None
+        if not passed:
+            raise SystemExit(1)
+        return
     if args.command.startswith("issue-"):
         _issue(args)
         return

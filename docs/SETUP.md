@@ -4,6 +4,12 @@ From a Prisme checkout, run `bash scripts/setup-github.sh /path/to/your/repo`. Y
 
 Before opening an issue, register and index the same `owner/repo` in Entire. [The existing install guide](install-github-estimate.md#entire-setup-and-current-credential-limit) gives the available CLI commands. The workflow requires `/gh/owner/repo` to report `ready` before it makes a model call. Set repository Actions permissions to allow the workflow's `issues: write`, `contents: read`, and `actions: read` declarations. An owner, member, or collaborator can open an issue or comment exactly `/prism estimate` to start an estimate; a successful estimate starts allocation.
 
+## Check credentials before a run
+
+From the directory containing `.env`, run `prism check --repo owner/name` for the default `.github/prism.json`, or add `--config configs/portfolio.json` for the shared config. The command uses the same `.env` loading as other Prism commands. It checks Entire readiness, the configured provider key with a free model-list request, the built-in worker-model price, CFO credential presence and config placeholders, read access to every shared repository's Actions secrets public key, and the Glance binary. It reports optional NeatLogs as skipped. Each check prints one line; a required failure gives a nonzero exit. No model completion, CFO.ai request, or secret write is made.
+
+The CFO.ai refresh token cannot be validated safely without rotating it, so the check confirms only its presence. Reading GitHub's public key proves read access, not permission to write secrets. Glance is reported as skipped when absent; install it before an estimate that needs context measurement.
+
 ## Values to provide
 
 These secrets are passed explicitly by the caller workflows. Set them in the **target** repository's Settings → Secrets and variables → Actions → Repository secrets. The setup command asks for them without showing their values. `GITHUB_TOKEN` is supplied by Actions and uses the workflow permissions above; it is not a secret you provide. The preflight creates `CFO_SECRET_WRITE_PREFLIGHT` with the fixed value `ok`; you do not provide it.

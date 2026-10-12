@@ -12,10 +12,10 @@ from . import results
 from .types import Hit
 
 
-def ensure_ready(repo: str) -> None:
+def ensure_ready(repo: str, timeout: float = 45) -> None:
     """Fail before model calls unless Entire reports a ready repository."""
     if os.environ.get("PRISM_ENTIRE_TRANSPORT") == "http":
-        payload = _repo_details(repo)
+        payload = _repo_details(repo, timeout)
     else:
         view_ref = f"/{repo}" if repo.startswith(("gh/", "et/")) else repo
         try:
@@ -23,7 +23,7 @@ def ensure_ready(repo: str) -> None:
                 ["entire", "repo", "view", view_ref, "--json"],
                 capture_output=True,
                 text=True,
-                timeout=45,
+                timeout=timeout,
             )
         except FileNotFoundError:
             raise RuntimeError("Entire CLI is not installed or is not on PATH") from None
@@ -51,16 +51,18 @@ def _hits(payload: dict) -> list[Hit]:
     ]
 
 
-def _request(url: str) -> dict | list:
+def _request(url: str, timeout: float = 45) -> dict | list:
     token = os.environ.get("ENTIRE_TOKEN")
     if not token:
         raise RuntimeError("ENTIRE_TOKEN is required for the Entire HTTP transport")
     request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
     try:
-        with urllib.request.urlopen(request, timeout=45) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.load(response)
     except urllib.error.HTTPError as error:
-        if error.code in (401, 403):
+        if error.code == 401:
+            raise RuntimeError("Entire HTTP 401: token expired") from None
+        if error.code == 403:
             raise RuntimeError("Entire HTTP authentication failed; check ENTIRE_TOKEN") from None
         raise RuntimeError(f"Entire HTTP request failed with status {error.code}") from None
     except urllib.error.URLError as error:
@@ -72,8 +74,8 @@ def _request(url: str) -> dict | list:
 
 
 @lru_cache
-def _repo_details(repo: str) -> dict:
-    repos = _request("https://us.console.entire.io/api/v1/repos")
+def _repo_details(repo: str, timeout: float = 45) -> dict:
+    repos = _request("https://us.console.entire.io/api/v1/repos", timeout)
     wanted = repo.removeprefix("gh/")
     entries = repos.get("repos", repos) if isinstance(repos, dict) else repos
     for entry in entries:
