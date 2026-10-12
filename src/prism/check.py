@@ -18,7 +18,6 @@ from . import cfo_actions, entire, glance, solve
 
 TIMEOUT = 15
 GUIDE = "https://github.com/Bhavya031/Prisme/blob/main/docs/SETUP.md#"
-ROOT = Path(__file__).resolve().parents[2]
 BANNER = """██████╗  ██████╗  ██╗ ███████╗ ███╗   ███╗
 ██╔══██╗ ██╔══██╗ ██║ ██╔════╝ ████╗ ████║
 ██████╔╝ ██████╔╝ ██║ ███████╗ ██╔████╔██║
@@ -123,7 +122,7 @@ def load_config(repo: str | None, path: Path | None, local: bool = False) -> Con
             ref_match = re.search(r"(?m)^\s+prisme_ref:\s*['\"]?([A-Za-z0-9_./-]+)['\"]?\s*(?:#.*)?$", caller)
             ref = ref_match.group(1) if ref_match else "main"
             raw = github_file("Bhavya031/Prisme", shared, ref)
-            chosen = ROOT / shared
+            chosen = Path(shared)
             label = f"Prisme {shared}@{ref}"
         else:
             raw = github_file(repo, ".github/prism.json")

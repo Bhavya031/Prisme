@@ -302,7 +302,7 @@ def _configure_cfo(repo: str | None, config: dict) -> bool:
     cfo = config["cfo"]
     changed = False
     print(check.link(check.GUIDE + "how-to-get-cfo-ai"))
-    examples = json.loads((ROOT / "configs/portfolio.json").read_text())["cfo"]
+    examples = json.loads(check.github_file("Bhavya031/Prisme", "configs/portfolio.json", "main") or "{}").get("cfo", {})
     explanations = {
         "org_id": "Your CFO.ai workspace number, shown in the app address after /org/",
         "scenario": "The scenario containing your tables, shown in the scenario selector",
@@ -314,7 +314,7 @@ def _configure_cfo(repo: str | None, config: dict) -> bool:
     }
     for key in cfo_actions.CFO_KEYS:
         if not isinstance(cfo.get(key), str) or not cfo[key] or cfo[key] == "PENDING":
-            print(f"{key}: {explanations[key]} · example {examples[key]!r}")
+            print(f"{key}: {explanations[key]} · example {examples.get(key, '')!r}")
             value = _input("Enter value (Enter to skip): ", strip=key != "column_prefix")
             if value.strip():
                 cfo[key] = value
@@ -375,16 +375,6 @@ def run(repo: str | None, config_path: Path | None) -> bool:
     if sys.stdin.isatty():
         _input("Press Enter to continue setup...")
     markers = {}
-    portfolio = ROOT / "configs/portfolio.json"
-    shared_repos = json.loads(portfolio.read_text())["cfo"]["shared_login_repos"]
-    if (repo and any(repo.casefold() == target.casefold() for target in shared_repos)
-            and any(row[0] in ("Config", "CFO.ai") and row[2] == "BLOCK" for row in rows)):
-        _screen("CFO.ai settings", "This repository can use the existing shared Prisme config.")
-        if _menu([("Use the shared Prisme settings (configs/portfolio.json)", "no table names to enter"),
-                  ("Enter my own settings", "use a config for this repository")]) == 0:
-            config_path = portfolio
-            rows = check.inspect(repo, config_path, local=not github)
-            markers["CFO.ai"] = "checked"
     checkout = None
     can_save_config = not source.remote
     needs_config_edit = (_row(rows, "Config")[2] == "BLOCK" or
