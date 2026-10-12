@@ -254,8 +254,6 @@ def _secret(repo: str | None, name: str, value: str, repos: list[str] | None = N
             raise RuntimeError(f"could not save {name} in {target}: {_gh_reason(result.stderr, value)}")
     if local:
         local_env.save(name, value)
-    else:
-        os.environ[name] = value
     print(f"Saved {name} " + ("as an Actions secret" if github else "to .env") + (" and .env." if github and local else "."))
 
 
@@ -463,6 +461,7 @@ def run(repo: str | None, config_path: Path | None) -> bool:
                 changed = True
                 pending_updates.add("Model provider")
 
+    saved_entire = False
     entire_row = _row(rows, "Entire")
     if entire_row[2] != "PASS":
         _status_screen("Entire", "Entire searches the indexed repository before a model call.", entire_row)
@@ -487,6 +486,7 @@ def run(repo: str | None, config_path: Path | None) -> bool:
             if token:
                 _secret(repo, "ENTIRE_TOKEN", token, github=github, local=local)
                 markers["Entire"] = "updated"
+                saved_entire = github and not local
             else:
                 print("Entire token was not refreshed. Run entire login and try again.")
                 markers["Entire"] = "skipped"
@@ -495,11 +495,13 @@ def run(repo: str | None, config_path: Path | None) -> bool:
             if value:
                 _secret(repo, "ENTIRE_TOKEN", value, github=github, local=local)
                 markers["Entire"] = "updated"
+                saved_entire = github and not local
             else:
                 markers["Entire"] = "skipped"
         else:
             markers["Entire"] = "skipped"
-        entire_row = _row(check.inspect(repo, config_path, local=not github), "Entire")
+        entire_row = _row(check.inspect(repo, config_path, local=not github, source=source,
+                                        saved_entire=saved_entire), "Entire")
         print(check.status_text(entire_row[2], f"Entire: {entire_row[3]}"))
 
     cfo_row = _row(rows, "CFO.ai")
@@ -614,4 +616,5 @@ def run(repo: str | None, config_path: Path | None) -> bool:
         markers["Config"] = "updated"
         markers.update({name: "updated" for name in pending_updates})
     print()
-    return check.run(repo, None if source.remote else config_path, markers=markers)
+    return check.run(repo, None if source.remote else config_path, markers=markers,
+                     saved_entire=saved_entire)

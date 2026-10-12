@@ -167,7 +167,7 @@ def github_secret(repo: str, name: str) -> bool:
 
 
 def inspect(repo: str | None, config_path: Path | None, on_start=None, on_row=None, local: bool = False,
-            source: ConfigSource | None = None) -> list[tuple]:
+            source: ConfigSource | None = None, saved_entire: bool = False) -> list[tuple]:
     """Return (service, purpose, state, words, fix) without exposing credentials."""
     if (repo is None and not local) or (repo is not None and not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo)):
         raise ValueError("--repo must be owner/name")
@@ -237,10 +237,15 @@ def inspect(repo: str | None, config_path: Path | None, on_start=None, on_row=No
         row("Entire", "Search repository", "BLOCK", "Repository needed for Entire check",
             ("name the repository", "Run prism init with --repo owner/name to check Entire readiness.",
              GUIDE + "how-to-get-entire"))
+    elif saved_entire and not local:
+        row("Entire", "Search repository", "WARN", "Saved to GitHub (cannot be read back to test)")
     elif not os.getenv("ENTIRE_TOKEN"):
-        row("Entire", "Search repository", "BLOCK", "Token missing",
-            ("add your token", "Run entire login, then save the result of entire auth token as ENTIRE_TOKEN.",
-             GUIDE + "how-to-get-entire"))
+        if not local and github_secret(repo, "ENTIRE_TOKEN"):
+            row("Entire", "Search repository", "WARN", "Token stored on GitHub; cannot be read back to test")
+        else:
+            row("Entire", "Search repository", "BLOCK", "Token missing",
+                ("add your token", "Run entire login, then save the result of entire auth token as ENTIRE_TOKEN.",
+                 GUIDE + "how-to-get-entire"))
     else:
         try:
             entire.ensure_ready(f"gh/{repo}", timeout=TIMEOUT)
@@ -395,7 +400,7 @@ def summary(rows: list[tuple]) -> None:
 
 
 def stream(repo: str | None, config_path: Path | None, local: bool = False,
-           markers: dict[str, str] | None = None) -> tuple[list[tuple], ConfigSource]:
+           markers: dict[str, str] | None = None, saved_entire: bool = False) -> tuple[list[tuple], ConfigSource]:
     _header(repo)
     source = load_config(repo, config_path, local)
     spinning = sys.stdout.isatty()
@@ -429,7 +434,8 @@ def stream(repo: str | None, config_path: Path | None, local: bool = False,
         _print_row(row, source, markers.get(name, default) if markers is not None else None)
 
     try:
-        rows = inspect(repo, config_path, start, done, local=local, source=source)
+        rows = inspect(repo, config_path, start, done, local=local, source=source,
+                       saved_entire=saved_entire)
     finally:
         stopped.set()
         if thread:
@@ -438,6 +444,6 @@ def stream(repo: str | None, config_path: Path | None, local: bool = False,
 
 
 def run(repo: str | None, config_path: Path | None, local: bool = False,
-        markers: dict[str, str] | None = None) -> bool:
-    rows, source = stream(repo, config_path, local, markers)
+        markers: dict[str, str] | None = None, saved_entire: bool = False) -> bool:
+    rows, source = stream(repo, config_path, local, markers, saved_entire)
     return show(rows, repo, source, streamed=True)
