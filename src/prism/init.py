@@ -141,12 +141,11 @@ def _workflows(repo: str, checkout: Path, config_path: Path) -> None:
 def run(repo: str, config_path: Path) -> bool:
     if not os.isatty(0):
         raise RuntimeError("run prism init in a terminal so keys can be entered hidden")
-    check.env_notice()
     rows = check.inspect(repo, config_path)
-    check.show(rows)
-    failed = {name for name, _, status, _, _ in rows if status == "FAILED"}
+    check.show(rows, repo, config_path)
+    failed = {name for name, _, state, _, _ in rows if state == "BLOCK"}
     checkout = None
-    if any(name == "Config" and status == "FAILED" for name, _, status, _, _ in rows):
+    if "Config" in failed:
         checkout = _checkout(repo)
         config_path = _config(repo, config_path, checkout)
     else:
@@ -161,7 +160,7 @@ def run(repo: str, config_path: Path) -> bool:
         repos = [repo]
 
     entire_problem = next((detail for name, _, _, detail, _ in rows if name == "Entire"), "")
-    if "Entire" in failed and entire_problem != "repository not ready":
+    if "Entire" in failed and entire_problem != "Repository not ready":
         print(f"Entire searches the indexed repository. {check.GUIDE}how-to-get-entire")
         saved_entire = False
         if _yes("Fetch your current token with entire auth token?"):
@@ -179,20 +178,23 @@ def run(repo: str, config_path: Path) -> bool:
                 _secret(repo, "ENTIRE_TOKEN", value)
     provider = (config.get("estimate") or {}).get("provider")
     key = {"openai": "OPENAI_API_KEY", "claude": "ANTHROPIC_API_KEY"}.get(provider)
-    if key and "Model key" in failed:
+    model_problem = next((detail for name, _, _, detail, _ in rows
+                          if name in ("OpenAI", "Anthropic", "Model provider")), "")
+    if key and (not os.getenv(key) or "Key rejected" in model_problem):
         print(f"{key} lets Prism predict files. {check.GUIDE}how-to-get-model-key")
         if _yes(f"Save {key}?"):
             value = getpass.getpass(f"{key}: ")
             if value:
                 _secret(repo, key, value)
-    if "GitHub token" in failed and (not os.getenv("CFO_SECRET_WRITE_TOKEN") or
-                                      any("cannot" in detail for name, _, _, detail, _ in rows if name == "GitHub token")):
+    if "GitHub" in failed and (not os.getenv("CFO_SECRET_WRITE_TOKEN") or
+                               any("Cannot" in detail for name, _, _, detail, _ in rows if name == "GitHub")):
         print(f"This GitHub token saves each rotated CFO.ai login. {check.GUIDE}how-to-get-github-token")
         if _yes("Save CFO_SECRET_WRITE_TOKEN?"):
             value = getpass.getpass("CFO_SECRET_WRITE_TOKEN: ")
             if value:
                 _secret(repo, "CFO_SECRET_WRITE_TOKEN", value, repos)
-    if not (os.getenv("CFO_OAUTH_CLIENT_ID") and os.getenv("CFO_OAUTH_REFRESH_TOKEN")):
+    if any(name == "CFO.ai" and state == "BLOCK" and detail.startswith("Sign-in required")
+           for name, _, state, detail, _ in rows):
         print(f"CFO.ai allocates the budget; set up its tables first. {check.GUIDE}how-to-get-cfo-ai")
         if _yes("Sign in to CFO.ai now?"):
             from .cfo_login import login
@@ -207,5 +209,4 @@ def run(repo: str, config_path: Path) -> bool:
         checkout = _checkout(repo)
     if checkout:
         _workflows(repo, checkout, config_path)
-    print("\nFinal checks:")
     return check.run(repo, config_path)
