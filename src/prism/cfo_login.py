@@ -1,7 +1,6 @@
 """First browser authorization for CFO.ai, saving its rotating credential to Actions."""
 
 import base64
-import errno
 import hashlib
 import json
 import re
@@ -82,18 +81,13 @@ def login(args):
         raise ValueError("every --repo must be owner/name")
 
     port = args.port or 8765
-    while True:
-        try:
-            server, state, callback = _listener(port)
-            break
-        except OSError as error:
-            if args.client_id:
-                raise RuntimeError(f"port {port} is unavailable; --client-id requires its exact registered port") from None
-            if error.errno != errno.EADDRINUSE:
-                raise
-            port += 1
-            if port > 65535:
-                raise RuntimeError("no free loopback port found") from None
+    try:
+        server, state, callback = _listener(port)
+    except OSError:
+        if args.client_id:
+            raise RuntimeError(f"port {port} is unavailable; --client-id requires its exact registered port") from None
+        server, state, callback = _listener(0)
+        port = server.server_address[1]
     print(f"Loopback port: {port}", flush=True)
     redirect_uri = f"http://127.0.0.1:{port}/callback"
     try:
