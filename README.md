@@ -156,24 +156,6 @@ Prism is a Python CLI with example GitHub Actions workflows. An eligible issue o
 
 ![How Prism works](docs/assets/prism-flow.svg)
 
-```mermaid
-flowchart TD
-    A[Issue opened or /prism estimate comment] --> B[Acknowledge with eyes reaction]
-    A --> C[Pin one source commit]
-    C --> D[Check authorization, duplicates, and cooldown]
-    D --> E[Search repository and predict existing files: SCOPE]
-    E --> F[Count selected context and project run tokens: USAGE]
-    F --> G[Price token estimates in USD: COST]
-    G --> H[Post estimate comment on issue]
-    H --> I[Write or reuse predicted-token inputs in CFO.ai decision test]
-    I --> J[Read saved budget rule result]
-    J --> K[Prism sanity-checks decision, model, amount, reason]
-    K --> L[Check request ID against existing reservations]
-    L -->|new approved request| M[Write reservation row through CFO.ai model tools]
-    M --> N[Post allocation table, models, and requester mention]
-    L -->|blocked or already recorded| N
-```
-
 1. The example workflow reacts to new issues and exact `/prism estimate` comments from repository owners, members, or collaborators. A separate job adds 👀. The estimate job pins the default branch commit (or a maintainer-set replay ref), then checks duplicate requests and a repository-wide cooldown before model calls.
 2. **Scope:** a model searches the ready Entire mirror for a live issue and predicts existing file paths. A replay searches Git at the pinned commit. Prism reads selected file contents from that commit.
 3. **Usage:** Glance counts the issue text and selected file contents as a starting context. Prism applies explicit, unvalidated assumptions to project low, central, and high token usage for a future worker run.
