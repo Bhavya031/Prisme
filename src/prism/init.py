@@ -259,19 +259,6 @@ def _secret(repo: str | None, name: str, value: str, repos: list[str] | None = N
     print(f"Saved {name} " + ("as an Actions secret" if github else "to .env") + (" and .env." if github and local else "."))
 
 
-def _read_config(path: Path) -> dict:
-    try:
-        config = json.loads(path.read_text())
-    except FileNotFoundError:
-        return {"cfo": {}, "estimate": {}}
-    if not isinstance(config, dict) or not isinstance(config.get("cfo", {}), dict) or not isinstance(
-            config.get("estimate", {}), dict):
-        raise ValueError("config needs cfo and estimate objects")
-    config.setdefault("cfo", {})
-    config.setdefault("estimate", {})
-    return config
-
-
 def _save_config(path: Path, config: dict, changed: bool, checkout: Path | None, local: bool = False) -> Path:
     if path == Path(".github/prism.json") and checkout:
         if (checkout / path).exists():
@@ -279,7 +266,7 @@ def _save_config(path: Path, config: dict, changed: bool, checkout: Path | None,
         path = checkout / path
     if changed:
         if path == Path(".github/prism.json") and checkout is None and not local:
-            print("Choose a local target checkout to save .github/prism.json.")
+            raise RuntimeError("No local checkout was selected; config settings were not saved")
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(config, indent=2) + "\n")
@@ -399,25 +386,39 @@ def run(repo: str | None, config_path: Path | None) -> bool:
                   ("Enter my own settings", "use a config for this repository")]) == 0:
             config_path = portfolio
             rows = check.inspect(repo, config_path, local=not github)
-            markers["CFO.ai"] = "updated"
+            markers["CFO.ai"] = "checked"
     checkout = None
-    if github and any(row[0] == "Config" for row in rows) and config_path == Path(".github/prism.json"):
-        _status_screen("Config", "Choose the local checkout that will hold your Prism config.",
-                       _row(rows, "Config"))
-        checkout = _checkout(repo)
-        if checkout:
-            config_path = checkout / config_path
-            markers["Config"] = "checked" if config_path.exists() else "skipped"
-            rows = check.inspect(repo, config_path, local=not github)
+    can_save_config = not source.remote
+    needs_config_edit = (_row(rows, "Config")[2] == "BLOCK" or
+                         any(row[0] in ("OpenAI", "Anthropic", "Model provider") and
+                             ("Provider not configured" in row[3] or "Model has no built-in price" in row[3])
+                             for row in rows) or
+                         "config incomplete" in _row(rows, "CFO.ai")[3].lower() or
+                         _row(rows, "GitHub")[3] == "Shared repository list invalid")
+    if github and source.remote and needs_config_edit:
+        if config_path == Path(".github/prism.json"):
+            _status_screen("Config", "A local checkout is needed before entering settings to save in the repository.",
+                           _row(rows, "Config"))
+            checkout = _checkout(repo)
+            if checkout:
+                config_path = checkout / config_path
+                if config_path.exists():
+                    source = check.load_config(None, config_path, local=True)
+                    rows = check.inspect(repo, config_path, local=not github, source=source)
+                else:
+                    source = check.ConfigSource(source.data, config_path, False, str(config_path))
+                can_save_config = True
+            else:
+                print("No checkout selected. Config settings will not be requested or saved.")
         else:
-            markers["Config"] = "skipped"
+            print("Shared Prisme settings must be edited in Prisme; this setup will not ask for unsavable values.")
     config = json.loads(json.dumps(source.data)) if source.data is not None else {"cfo": {}, "estimate": {}}
     config.setdefault("cfo", {})
     config.setdefault("estimate", {})
     if github:
         shared = config["cfo"].get("shared_login_repos", [])
         changed = False
-        if isinstance(shared, list) and all(isinstance(target, str) for target in shared):
+        if can_save_config and isinstance(shared, list) and all(isinstance(target, str) for target in shared):
             canonical = [repo if _repo_name(target).casefold() == repo.casefold()
                          else _verify_github(_repo_name(target)) for target in shared]
             if canonical != shared:
@@ -426,7 +427,8 @@ def run(repo: str | None, config_path: Path | None) -> bool:
     else:
         changed = False
     model_row = next(row for row in rows if row[0] in ("OpenAI", "Anthropic", "Model provider"))
-    if model_row[2] != "PASS":
+    pending_updates = set()
+    if model_row[2] != "PASS" and can_save_config:
         _status_screen("Model provider", "Prism uses this key to predict files and estimate cost.", model_row)
         current = config["estimate"].get("provider")
         choice = _menu([("OpenAI", "gpt-6-sol"), ("Anthropic", "claude-sonnet-5-5"),
@@ -438,7 +440,7 @@ def run(repo: str | None, config_path: Path | None) -> bool:
             if config["estimate"].get("provider") != provider or config["estimate"].get("worker_model") != model:
                 config["estimate"].update(provider=provider, worker_model=model)
                 changed = True
-                markers["Model provider"] = "updated"
+                pending_updates.add("Model provider")
             key = {"openai": "OPENAI_API_KEY", "claude": "ANTHROPIC_API_KEY"}[provider]
             needs_key = not os.getenv(key) or (provider == current and "Key rejected" in model_row[3])
             if needs_key and _menu([("Enter an API key", f"save {key} for this setup"),
@@ -453,12 +455,13 @@ def run(repo: str | None, config_path: Path | None) -> bool:
                 markers.setdefault("Model provider", "skipped")
         else:
             markers["Model provider"] = "skipped"
-    for key, value in {"cooldown_minutes": 10, "max_cost_usd": 0.05, "max_output_tokens": 4000,
-                       "max_extra_rounds": 1, "timeout_seconds": 180}.items():
-        if key not in config["estimate"] or config["estimate"][key] == "PENDING":
-            config["estimate"][key] = value
-            changed = True
-            markers["Model provider"] = "updated"
+    if can_save_config:
+        for key, value in {"cooldown_minutes": 10, "max_cost_usd": 0.05, "max_output_tokens": 4000,
+                           "max_extra_rounds": 1, "timeout_seconds": 180}.items():
+            if key not in config["estimate"] or config["estimate"][key] == "PENDING":
+                config["estimate"][key] = value
+                changed = True
+                pending_updates.add("Model provider")
 
     entire_row = _row(rows, "Entire")
     if entire_row[2] != "PASS":
@@ -507,12 +510,12 @@ def run(repo: str | None, config_path: Path | None) -> bool:
             _screen("CFO.ai", "CFO.ai decides whether the estimate fits the budget.", "BLOCK", "Local sign-in required")
         else:
             _status_screen("CFO.ai", "CFO.ai decides whether the estimate fits the budget.", cfo_row)
-        if "config incomplete" in cfo_row[3].lower():
+        if can_save_config and "config incomplete" in cfo_row[3].lower():
             if _menu([("Enter table settings", "use the names from your CFO.ai page"),
                       ("Skip for now", "leave the config unchanged")]) == 0:
                 if _configure_cfo(repo, config):
                     changed = True
-                    markers["CFO.ai"] = "updated"
+                    pending_updates.add("CFO.ai")
             else:
                 markers.setdefault("CFO.ai", "skipped")
         if cfo_row[3].startswith("Sign-in required") or local_sign_in_missing:
@@ -550,7 +553,7 @@ def run(repo: str | None, config_path: Path | None) -> bool:
                 raise ValueError("shared login repositories must be unique owner/name values including --repo")
             config["cfo"]["shared_login_repos"] = repos
             changed = True
-            markers["GitHub"] = "updated"
+            pending_updates.add("GitHub")
         else:
             markers["GitHub"] = "skipped"
     if github and github_row[2] == "BLOCK" and github_row[3] != "Shared repository list invalid":
@@ -588,6 +591,7 @@ def run(repo: str | None, config_path: Path | None) -> bool:
         config_path = _save_config(config_path, config, changed, checkout, local=True)
         if changed and config_path.exists():
             markers["Config"] = "updated"
+            markers.update({name: "updated" for name in pending_updates})
         print()
         return check.run(repo, config_path, local=True, markers=markers)
     if not complete:
@@ -602,10 +606,12 @@ def run(repo: str | None, config_path: Path | None) -> bool:
                 config_path = _save_config(config_path, config, changed, checkout)
                 if changed and config_path.exists():
                     markers["Config"] = "updated"
+                    markers.update({name: "updated" for name in pending_updates})
                 _workflows(repo, checkout, config_path)
                 changed = False
     config_path = _save_config(config_path, config, changed, checkout)
     if changed and config_path.exists():
         markers["Config"] = "updated"
+        markers.update({name: "updated" for name in pending_updates})
     print()
-    return check.run(repo, config_path, markers=markers)
+    return check.run(repo, None if source.remote else config_path, markers=markers)
