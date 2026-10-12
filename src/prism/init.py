@@ -505,6 +505,7 @@ def run(repo: str | None, config_path: Path | None) -> bool:
         print(check.status_text(entire_row[2], f"Entire: {entire_row[3]}"))
 
     cfo_row = _row(rows, "CFO.ai")
+    shared_before = config["cfo"].get("shared_login_repos")
     local_sign_in_missing = local and not all(local_env.present(name) for name in (
         "CFO_OAUTH_CLIENT_ID", "CFO_OAUTH_REFRESH_TOKEN"))
     if cfo_row[2] == "BLOCK" or local_sign_in_missing:
@@ -545,7 +546,9 @@ def run(repo: str | None, config_path: Path | None) -> bool:
         github_row = _row(rows, "GitHub")
         if github_row[2] == "BLOCK":
             _status_screen("GitHub token", "This token lets Prism save each rotated CFO.ai sign-in.", github_row)
-    if github and github_row[2] == "BLOCK" and github_row[3] == "Shared repository list invalid":
+    if (github and can_save_config and github_row[2] == "BLOCK" and
+            github_row[3] == "Shared repository list invalid" and
+            config["cfo"].get("shared_login_repos") == shared_before):
         if _menu([("Fix shared repositories", "enter owner/name values, comma separated"),
                   ("Skip for now", "keep the current list")]) == 0:
             value = _input(f"Shared repositories (include {repo}): ")
