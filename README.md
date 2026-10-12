@@ -43,7 +43,9 @@ flowchart TD
 
 ## Install
 
-Follow [the setup guide](docs/SETUP.md) or run [`bash scripts/setup-github.sh /path/to/your/repo`](scripts/setup-github.sh) from a Prisme checkout. Copy the small caller files [`examples/prism-estimate.yml`](examples/prism-estimate.yml) and [`examples/prism-cfo-allocation.yml`](examples/prism-cfo-allocation.yml) once to the target repository's `.github/workflows/`; their job logic runs from Prisme. Set the target repository's secrets. Commit `.github/prism.json` on its default branch only when using per-repository settings; for shared settings, set `config: configs/portfolio.json` in both callers. Prisme must be public for public forks to call its workflows.
+Run `prism init --repo owner/name` from a Prisme checkout, or follow [the setup guide](docs/SETUP.md). The older [`scripts/setup-github.sh`](scripts/setup-github.sh) remains available. The small caller files [`examples/prism-estimate.yml`](examples/prism-estimate.yml) and [`examples/prism-cfo-allocation.yml`](examples/prism-cfo-allocation.yml) go in the target repository's `.github/workflows/`; their job logic runs from Prisme. Commit `.github/prism.json` on its default branch only when using per-repository settings; for shared settings, set `config: configs/portfolio.json` in both callers. Prisme must be public for public forks to call its workflows.
+
+First CFO.ai sign-in is `prism cfo-login --repo owner/name` plus one approve click; it saves `CFO_OAUTH_CLIENT_ID` and `CFO_OAUTH_REFRESH_TOKEN` as Actions secrets, and Prism renews the token on every run after that.
 
 ## Configuration
 

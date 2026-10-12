@@ -1,8 +1,34 @@
 # Set up Prism on a GitHub repository
 
-From a Prisme checkout, run `bash scripts/setup-github.sh /path/to/your/repo`. You need `gh` authenticated for that repository and permission to set its Actions secrets. The command asks for every setting, hides secret input, writes `.github/prism.json` when using a per-repository config, and copies the two small caller files in `examples/` to `.github/workflows/`. Review and commit the two callers, plus `.github/prism.json` if generated, on the target repository's default branch. It stops if any destination file already exists. Prisme must be public before public forks can call its reusable workflows.
+From a Prisme checkout, run `prism init --repo owner/name` (or `prism init --repo owner/name --config configs/portfolio.json` for the shared config). You need `gh` authenticated for that repository and permission to set its Actions secrets. The command asks for missing settings, hides secret input, and offers to add `.github/prism.json` and the two small caller files in `examples/` to a local target checkout. Review and commit those files on the target repository's default branch. The older `bash scripts/setup-github.sh /path/to/your/repo` remains available. Prisme must be public before public forks can call its reusable workflows.
 
 Before opening an issue, register and index the same `owner/repo` in Entire. [The existing install guide](install-github-estimate.md#entire-setup-and-current-credential-limit) gives the available CLI commands. The workflow requires `/gh/owner/repo` to report `ready` before it makes a model call. Set repository Actions permissions to allow the workflow's `issues: write`, `contents: read`, and `actions: read` declarations. An owner, member, or collaborator can open an issue or comment exactly `/prism estimate` to start an estimate; a successful estimate starts allocation.
+
+## Check credentials before a run
+
+From the directory containing `.env`, run `prism check --repo owner/name`. When the repository's estimate caller passes `config: configs/portfolio.json`, the check reads that shared config; otherwise it reads `.github/prism.json`. Use `--config` to select a file explicitly. The command uses the same `.env` loading as other Prism commands. Its overview separates blockers from unverified and optional items, then lists only the actions needed to clear blockers. It checks Entire readiness, the configured provider key with a free model-list request, the built-in worker-model price, CFO config and GitHub secret metadata, read access to every shared repository's Actions secrets public key, and the Glance binary. A blocker gives a nonzero exit. No model completion, CFO.ai request, or secret write is made.
+
+For a computer-only setup, `prism init` marks `.env` for local credentials, and `prism check` uses those credentials without checking Actions secrets. Pass `--repo owner/name` to verify Entire's repository readiness; without a repository, that check remains a blocker. A local CFO.ai allocation saves each rotated refresh token back to `.env`.
+
+The CFO.ai refresh token cannot be validated safely without rotating it. The check looks for the client ID and refresh token in GitHub secret metadata when its read token permits this; a missing local refresh token alone is not a blocker. Reading GitHub's public key proves read access, not permission to write secrets. Glance is shown as optional when absent; install it before a local estimate that needs context measurement.
+
+Run `prism init` for guided setup, or choose the guide-only option on its first screen. Add `--repo owner/name` and `--config configs/portfolio.json` when useful. Choose GitHub repository, this computer, or both. GitHub setup asks for a repository link and checks `gh` login, repository access, admin or maintain permission, and push permission before changing setup. In a terminal, use ↑/↓ and Enter or a number key to choose; Esc or q cancels. Nonterminal input uses numbered prompts. GitHub setup asks for a local checkout when it needs to create `.github/prism.json` or caller files. Local setup saves credentials in a private `.env` in the current folder and warns when Git does not ignore it. For both destinations, CFO.ai needs two separate browser sign-ins because each refresh token rotates on use. Review and commit any config or caller files it adds; the command does not commit or push them. The older `scripts/setup-github.sh` remains available, but `prism init` is the guided entry point.
+
+## How to get Entire
+
+Create an Entire account and connect the GitHub repository to it. Run `entire login` in the region containing your mirror. Check `entire repo mirror list --available --name owner/repo`, then add it with `entire repo mirror add /gh/owner/repo`. Wait until `entire repo view /gh/owner/repo --json` reports `ready`. Run `entire auth token` to obtain the current login-session token, then save it as the repository's `ENTIRE_TOKEN` Actions secret with `prism init`. This is a short-lived login session, observed to expire within a day; refresh the secret before a run if it expires.
+
+## How to get a model key
+
+Create an API key with the provider selected by `estimate.provider` (OpenAI or Anthropic). Use `prism init` to enter it hidden and save only that provider's key to the target repository. `prism check` uses a free model-list request to check the key; it does not make a completion call.
+
+## How to get CFO.ai
+
+Create a CFO.ai account and set up the page, budget table, decision table, request table, and saved budget rule described below. Enter their exact names under `cfo` in the Prism config. Run `prism cfo-login --repo owner/name` and approve the browser sign-in; repeat `--repo` for every repository sharing one login. `prism init` can offer this sign-in for you. The command saves the public client ID and rotating refresh token as Actions secrets. A real allocation run is the only safe validation of the refresh token because checking it would rotate it.
+
+## How to get a GitHub token
+
+Create a GitHub personal access token with **Secrets: Read and write** permission for every repository in `cfo.shared_login_repos`. Save it as `CFO_SECRET_WRITE_TOKEN` with `prism init`. `prism check` reads each repository's Actions secrets public key to confirm reachability; that read cannot prove write permission.
 
 ## Values to provide
 
@@ -15,8 +41,8 @@ These secrets are passed explicitly by the caller workflows. Set them in the **t
 | `NEATLOGS_API_KEY` | Sends prediction traces to Neatlogs. | Neatlogs account; issuance steps are not documented in code. | No. Press Enter to skip. |
 | `ENTIRE_TOKEN` | Entire credential for searching the indexed target repository. | Log in to Entire in the region containing the mirror and create a token there; the exact issuance flow is not documented in code. | Yes. |
 | `PRISME_READ_TOKEN` | GitHub token that can read private `Bhavya031/Prisme`, used by install and checkout. | GitHub personal access token with Prisme Contents read permission. | Only while Prisme is private. |
-| `CFO_OAUTH_CLIENT_ID` | CFO.ai OAuth client ID used with the refresh token. | CFO.ai OAuth registration; obtaining it is not documented in code. | Yes for allocation. |
-| `CFO_OAUTH_REFRESH_TOKEN` | Rotating CFO.ai OAuth refresh token. | CFO.ai browser authorization; obtaining it is not documented in code. | Yes for allocation. |
+| `CFO_OAUTH_CLIENT_ID` | CFO.ai OAuth client ID used with the refresh token. | `prism cfo-login` below. | Yes for allocation. |
+| `CFO_OAUTH_REFRESH_TOKEN` | Rotating CFO.ai OAuth refresh token. | `prism cfo-login` below. | Yes for allocation. |
 | `CFO_SECRET_WRITE_TOKEN` | Separate GitHub token used to update the target repository's Actions secrets after CFO.ai rotates the refresh token. | GitHub personal access token with **Secrets: Read and write** permission in every repository sharing the login; token creation steps are not documented in code. | Yes for allocation. |
 
 ## Configuration
@@ -60,6 +86,8 @@ The request table uses row dimension `<prefix>request ID`, followed by these col
 For the portfolio budget table, the supplied schema is row dimension `Portfolio budget record` with columns `Portfolio budget repository`, `Portfolio budget USD`, `Portfolio spending USD`, `Portfolio existing reservations USD`, and `Portfolio max budget fraction`. These names and the saved rule's connection to them must be confirmed in CFO.ai because Prism does not inspect that table. The old K2 budget row dimension and columns cannot be confirmed from code; only its decision and request names were encoded there.
 
 ## CFO.ai sign-in and secret rotation
+
+For the first sign-in, run `prism cfo-login --repo owner/name` (repeat `--repo` for every repository sharing the login), then approve once in your browser while signed in to app.cfo.ai. The command checks Actions secret writes first, registers a public OAuth client, and saves `CFO_OAUTH_CLIENT_ID` and `CFO_OAUTH_REFRESH_TOKEN` as Actions secrets in each named repository. It prints the public client ID and sign-in link, never the refresh token. For an existing public client, use `--client-id ID --port PORT` with its registered loopback port. The callback wait defaults to five minutes; change it with `--timeout SECONDS`. Prism renews and saves the rotating refresh token on every allocation run after that.
 
 The CFO.ai refresh token rotates on every use. Before OAuth, each allocation workflow reads its selected Prism config, checks the Actions secret public key, and writes the harmless `CFO_SECRET_WRITE_PREFLIGHT` secret in every listed repository. The code also rewrites `CFO_SECRET_WRITE_TOKEN` with itself in each repository before refresh. Only after those writes succeed does it exchange `CFO_OAUTH_REFRESH_TOKEN`, save the replacement to every listed repository, and use the access token. If any save fails, allocation stops and names the repository; repositories may then hold different tokens and browser reauthorization may be required. The write token needs **Secrets: Read and write** permission in every listed repository. Run only one allocation at a time across repositories sharing a login: the `prism-cfo-allocation` concurrency group serializes runs inside one repository, not across repositories.
 

@@ -15,6 +15,14 @@ def parser() -> argparse.ArgumentParser:
     command_parser = argparse.ArgumentParser(prog="prism")
     commands = command_parser.add_subparsers(dest="command", required=True)
 
+    check = commands.add_parser("check", help="check run credentials without model calls or secret writes")
+    check.add_argument("--repo", help="target repository, owner/name (optional for local setup)")
+    check.add_argument("--config", type=Path, help="Prism JSON config")
+
+    init = commands.add_parser("init", help="set up missing credentials and caller workflows interactively")
+    init.add_argument("--repo", help="target repository, owner/name or GitHub URL")
+    init.add_argument("--config", type=Path, help="Prism JSON config")
+
     predict = commands.add_parser("predict")
     predict.add_argument("issue_url")
     predict.add_argument("--repo", required=True)
@@ -42,6 +50,12 @@ def parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--stage", default=None,
                            help="stage name for the runs.json export (default: run-<run id>)")
     commands.add_parser("dry-run").add_argument("--manifest", type=Path, default=MANIFEST)
+
+    cfo_login = commands.add_parser("cfo-login", help="sign in to CFO.ai and save GitHub Actions secrets")
+    cfo_login.add_argument("--repo", action="append", required=True, metavar="OWNER/NAME")
+    cfo_login.add_argument("--client-id", help="existing public OAuth client ID; requires --port")
+    cfo_login.add_argument("--port", type=int, help="registered loopback port for --client-id")
+    cfo_login.add_argument("--timeout", type=int, default=300, metavar="SECONDS")
 
     cost = commands.add_parser("cost", help="estimated file-discovery USD per model from a saved run or a predict JSON "
                                             "output; not the cost of solving an issue (see solve-estimate)")
@@ -362,7 +376,36 @@ def _issue(args) -> None:
 
 def main(argv=None) -> None:
     args = parser().parse_args(argv)
+    if args.command == "cfo-login":
+        from .cfo_login import login
+        try:
+            login(args)
+        except (OSError, RuntimeError, ValueError) as error:
+            raise SystemExit(f"prism cfo-login: {error}") from None
+        return
     _load_env()
+    if args.command == "init":
+        from . import init
+
+        try:
+            passed = init.run(args.repo, args.config)
+        except KeyboardInterrupt:
+            raise SystemExit("prism init: Setup cancelled.") from None
+        except (OSError, RuntimeError, ValueError) as error:
+            raise SystemExit(f"prism init: {error}") from None
+        if not passed:
+            raise SystemExit(1)
+        return
+    if args.command == "check":
+        from . import check
+
+        try:
+            passed = check.run(args.repo, args.config, local=os.environ.get("PRISM_LOCAL_SECRETS") == "1")
+        except ValueError as error:
+            raise SystemExit(f"prism check: {error}") from None
+        if not passed:
+            raise SystemExit(1)
+        return
     if args.command.startswith("issue-"):
         _issue(args)
         return
