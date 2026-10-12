@@ -1,6 +1,6 @@
 # Prism
 
-![Prism: automated estimation and allocation](docs/assets/prism-poster.gif)
+![Prism: automated estimation and allocation](docs/assets/prism-poster.png)
 
 A prism splits one beam into its parts. **Prism** takes one GitHub issue and shows three sides before a coding worker starts: **scope** (the existing files likely to change), **usage** (predicted tokens), and **cost** (a USD estimate followed by a budget-rule allocation). It provides automated estimation and allocation; it does not implement the issue.
 
