@@ -4,6 +4,7 @@ import json
 import itertools
 import os
 import re
+import subprocess
 import sys
 import threading
 import urllib.error
@@ -15,6 +16,7 @@ from . import cfo_actions, entire, glance, solve
 
 TIMEOUT = 15
 GUIDE = "https://github.com/Bhavya031/Prisme/blob/main/docs/SETUP.md#"
+ROOT = Path(__file__).resolve().parents[2]
 BANNER = """██████╗  ██████╗  ██╗ ███████╗ ███╗   ███╗
 ██╔══██╗ ██╔══██╗ ██║ ██╔════╝ ████╗ ████║
 ██████╔╝ ██████╔╝ ██║ ███████╗ ██╔████╔██║
@@ -57,6 +59,40 @@ def status_text(state: str, words: str) -> str:
     icon, code = {"PASS": ("🟢", "32"), "BLOCK": ("🔴", "31"),
                   "WARN": ("🟡", "33"), "MISSING": ("⚪", "90")}[state]
     return f"{icon} {paint(words, code)}"
+
+
+def gh_env() -> dict:
+    env = os.environ.copy()
+    dotenv = {}
+    if not env.get("PRISM_SKIP_DOTENV") and Path(".env").is_file():
+        for line in Path(".env").read_text().splitlines():
+            name, separator, value = line.partition("=")
+            name = name.strip().removeprefix("export ").strip()
+            if separator and name in ("GH_TOKEN", "GITHUB_TOKEN"):
+                dotenv[name] = value.strip().strip("\"'")
+    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
+        if env.get(name) and (env[name] == dotenv.get(name) or env[name] == env.get("CFO_SECRET_WRITE_TOKEN")):
+            env.pop(name)
+    return env
+
+
+def resolve_config(repo: str | None, path: Path | None) -> Path:
+    if path is not None:
+        return path
+    default = Path(".github/prism.json")
+    if not repo or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+        return default
+    try:
+        caller = subprocess.run(
+            ["gh", "api", "-H", "Accept: application/vnd.github.raw",
+             f"repos/{repo}/contents/.github/workflows/prism-estimate.yml"],
+            capture_output=True, text=True, timeout=TIMEOUT, env=gh_env())
+    except (OSError, subprocess.TimeoutExpired):
+        return default
+    if caller.returncode == 0 and re.search(
+            r"(?m)^\s+config:\s*['\"]?configs/portfolio\.json['\"]?\s*(?:#.*)?$", caller.stdout):
+        return ROOT / "configs/portfolio.json"
+    return default
 
 
 def _get(url: str, headers: dict) -> None:
@@ -340,7 +376,8 @@ def stream(repo: str | None, config_path: Path, local: bool = False,
     return rows
 
 
-def run(repo: str | None, config_path: Path, local: bool = False,
+def run(repo: str | None, config_path: Path | None, local: bool = False,
         markers: dict[str, str] | None = None) -> bool:
+    config_path = resolve_config(repo if not local else None, config_path)
     rows = stream(repo, config_path, local, markers)
     return show(rows, repo, config_path, streamed=True)

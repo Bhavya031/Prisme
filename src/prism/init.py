@@ -101,9 +101,10 @@ def _menu(options: list[tuple[str, str]], selected: int = 0) -> int:
         termios.tcsetattr(fd, termios.TCSADRAIN, original)
 
 
-def _input(prompt: str) -> str:
+def _input(prompt: str, strip: bool = True) -> str:
     try:
-        return input(prompt).strip()
+        value = input(prompt)
+        return value.strip() if strip else value
     except EOFError:
         raise Cancelled("Setup cancelled.") from None
 
@@ -174,21 +175,6 @@ def _repo_name(value: str) -> str:
     return repo
 
 
-def _gh_env() -> dict:
-    env = os.environ.copy()
-    dotenv = {}
-    if not env.get("PRISM_SKIP_DOTENV") and Path(".env").is_file():
-        for line in Path(".env").read_text().splitlines():
-            name, separator, value = line.partition("=")
-            name = name.strip().removeprefix("export ").strip()
-            if separator and name in ("GH_TOKEN", "GITHUB_TOKEN"):
-                dotenv[name] = value.strip().strip("\"'")
-    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
-        if env.get(name) and (env[name] == dotenv.get(name) or env[name] == env.get("CFO_SECRET_WRITE_TOKEN")):
-            env.pop(name)
-    return env
-
-
 def _gh_reason(stderr: str, secret: str = "") -> str:
     line = next((line.strip() for line in stderr.splitlines() if line.strip()), "gh returned no details")
     if secret:
@@ -197,7 +183,7 @@ def _gh_reason(stderr: str, secret: str = "") -> str:
 
 
 def _verify_github(repo: str) -> str:
-    gh_env = _gh_env()
+    gh_env = check.gh_env()
     try:
         auth = subprocess.run(["gh", "auth", "status", "--hostname", "github.com"],
                               capture_output=True, text=True, timeout=15, env=gh_env)
@@ -261,7 +247,7 @@ def _secret(repo: str | None, name: str, value: str, repos: list[str] | None = N
     for target in targets:
         try:
             result = subprocess.run(["gh", "secret", "set", name, "--repo", target],
-                                    input=value, text=True, capture_output=True, timeout=30, env=_gh_env())
+                                    input=value, text=True, capture_output=True, timeout=30, env=check.gh_env())
         except (OSError, subprocess.TimeoutExpired):
             raise RuntimeError(f"could not save {name} in {target}; check gh login") from None
         if result.returncode:
@@ -331,10 +317,21 @@ def _configure_cfo(repo: str | None, config: dict) -> bool:
     cfo = config["cfo"]
     changed = False
     print(check.link(check.GUIDE + "how-to-get-cfo-ai"))
+    examples = json.loads((ROOT / "configs/portfolio.json").read_text())["cfo"]
+    explanations = {
+        "org_id": "Your CFO.ai workspace number, shown in the app address after /org/",
+        "scenario": "The scenario containing your tables, shown in the scenario selector",
+        "page": "The page containing the tables, shown in the page sidebar",
+        "budget_table": "The repository budget table, named at the top of its table",
+        "request_table": "The allocation request table, named at the top of its table",
+        "decision_table": "The saved rule's decision table, named at the top of its table",
+        "column_prefix": "The exact start of the table's column names, including a trailing space",
+    }
     for key in cfo_actions.CFO_KEYS:
         if not isinstance(cfo.get(key), str) or not cfo[key] or cfo[key] == "PENDING":
-            value = _input(f"{key} (Enter to skip): ")
-            if value:
+            print(f"{key}: {explanations[key]} · example {examples[key]!r}")
+            value = _input("Enter value (Enter to skip): ", strip=key != "column_prefix")
+            if value.strip():
                 cfo[key] = value
                 changed = True
     if repo and "shared_login_repos" not in cfo:
@@ -349,7 +346,7 @@ def _configure_cfo(repo: str | None, config: dict) -> bool:
     return changed
 
 
-def run(repo: str | None, config_path: Path) -> bool:
+def run(repo: str | None, config_path: Path | None) -> bool:
     _screen("How do you want to set up Prism?")
     choice = _menu([("Set it up for me", "guided, one step at a time"),
                     ("I will do it myself", "show me the guide")], selected=0)
@@ -358,10 +355,13 @@ def run(repo: str | None, config_path: Path) -> bool:
         print(check.link(check.GUIDE + "how-to-get-entire"))
         print(check.link(check.GUIDE + "how-to-get-cfo-ai"))
         print(check.link(check.GUIDE + "how-to-get-github-token"))
-        print(f"prism check --repo {repo or 'owner/name'} --config {config_path}")
+        print(f"prism check --repo {repo or 'owner/name'} --config {config_path or '.github/prism.json'}")
         if repo or os.environ.get("PRISM_LOCAL_SECRETS") == "1":
-            check.summary(check.inspect(_repo_name(repo) if repo else None, config_path,
-                                        local=os.environ.get("PRISM_LOCAL_SECRETS") == "1"))
+            local_only = os.environ.get("PRISM_LOCAL_SECRETS") == "1"
+            check.summary(check.inspect(_repo_name(repo) if repo else None,
+                                        check.resolve_config(_repo_name(repo) if repo and not local_only else None,
+                                                             config_path),
+                                        local=local_only))
         return True
 
     _screen("Where will Prism run?", "Choose where these credentials and setup files should go.")
@@ -386,11 +386,22 @@ def run(repo: str | None, config_path: Path) -> bool:
         if repo:
             local_env.save("GITHUB_REPOSITORY", repo)
 
+    config_path = check.resolve_config(repo if github else None, config_path)
     print()
     rows = check.stream(repo, config_path, local=not github)
     if sys.stdin.isatty():
         _input("Press Enter to continue setup...")
     markers = {}
+    portfolio = ROOT / "configs/portfolio.json"
+    shared_repos = json.loads(portfolio.read_text())["cfo"]["shared_login_repos"]
+    if (repo and any(repo.casefold() == target.casefold() for target in shared_repos)
+            and any(row[0] in ("Config", "CFO.ai") and row[2] == "BLOCK" for row in rows)):
+        _screen("CFO.ai settings", "This repository can use the existing shared Prisme config.")
+        if _menu([("Use the shared Prisme settings (configs/portfolio.json)", "no table names to enter"),
+                  ("Enter my own settings", "use a config for this repository")]) == 0:
+            config_path = portfolio
+            rows = check.inspect(repo, config_path, local=not github)
+            markers["CFO.ai"] = "updated"
     checkout = None
     if github and any(row[0] == "Config" for row in rows) and config_path == Path(".github/prism.json"):
         _status_screen("Config", "Choose the local checkout that will hold your Prism config.",
@@ -511,14 +522,14 @@ def run(repo: str | None, config_path: Path) -> bool:
                 repos = config["cfo"].get("shared_login_repos", [repo])
                 if github:
                     client_id, refresh = login(SimpleNamespace(repo=repos, client_id=None, port=None,
-                                                               timeout=300, gh_env=_gh_env()))
+                                                               timeout=300, gh_env=check.gh_env()))
                     os.environ["CFO_OAUTH_CLIENT_ID"] = client_id
                     os.environ["CFO_OAUTH_REFRESH_TOKEN"] = refresh
                 if local:
                     if github:
                         print("Local runs need a separate CFO.ai sign-in because each refresh token rotates on use.")
                     client_id, refresh = login(SimpleNamespace(repo=[], client_id=None, port=None,
-                                                               timeout=300, gh_env=_gh_env()))
+                                                               timeout=300, gh_env=check.gh_env()))
                     local_env.save("CFO_OAUTH_CLIENT_ID", client_id)
                     local_env.save("CFO_OAUTH_REFRESH_TOKEN", refresh)
                 markers["CFO.ai"] = "updated"

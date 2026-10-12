@@ -17,11 +17,11 @@ def parser() -> argparse.ArgumentParser:
 
     check = commands.add_parser("check", help="check run credentials without model calls or secret writes")
     check.add_argument("--repo", help="target repository, owner/name (optional for local setup)")
-    check.add_argument("--config", type=Path, default=Path(".github/prism.json"), help="Prism JSON config")
+    check.add_argument("--config", type=Path, help="Prism JSON config")
 
     init = commands.add_parser("init", help="set up missing credentials and caller workflows interactively")
     init.add_argument("--repo", help="target repository, owner/name or GitHub URL")
-    init.add_argument("--config", type=Path, default=Path(".github/prism.json"), help="Prism JSON config")
+    init.add_argument("--config", type=Path, help="Prism JSON config")
 
     predict = commands.add_parser("predict")
     predict.add_argument("issue_url")
