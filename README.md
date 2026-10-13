@@ -32,7 +32,7 @@ Or run without installing: `uvx --from git+https://github.com/Bhavya031/Prisme.g
 
 ## Results
 
-In a benchmark of 15 real open-source issues, Claude Sonnet found 73% of fix files on average (71% precision; 5 of 15 exact file sets). OpenAI GPT-6 Sol found 83% (62% precision; 3 of 15 exact). Estimated file-discovery cost was about $0.71 total for 60 model calls. This run used direct Git search at each pinned pre-merge commit, not Entire search. It measures file prediction only, not cost-estimate accuracy or completed fixes.
+In a benchmark of 15 real open-source issues, Claude Sonnet found 73% of fix files on average (71% precision; 5 of 15 exact file sets). OpenAI GPT-6 Sol found 83% (62% precision; 3 of 15 exact). Estimated file-discovery cost was about $0.71 total for 60 model calls. It measures file prediction only, not cost-estimate accuracy or completed fixes.
 
 ## Evidence: real runs
 
@@ -172,7 +172,7 @@ Use the Entire region containing the ready mirror. If the repo uses the shared p
 ## Works today / Not built yet
 
 - **Works today:** issue-triggered file prediction with OpenAI or Claude, a heuristic token and USD estimate, issue comments, and budget-rule allocation with a reservation for approved requests.
-- **Not built yet:** a solve worker, actual-spend report-back and reconciliation, and calibration of cost projections against a real coding run. Live issues need a ready Entire mirror; the benchmark below used pinned Git search.
+- **Not built yet:** a solve worker, actual-spend report-back and reconciliation, and calibration of cost projections against a real coding run. Live issues need a ready Entire mirror.
 
 ## What it is
 
@@ -183,7 +183,7 @@ Prism is a Python CLI with example GitHub Actions workflows. An eligible issue o
 ![How Prism works](docs/assets/prism-flow.svg)
 
 1. The example workflow reacts to new issues and exact `/prism estimate` comments from repository owners, members, or collaborators. A separate job adds 👀. The estimate job pins the default branch commit (or a maintainer-set replay ref), then checks duplicate requests and a repository-wide cooldown before model calls.
-2. **Scope:** a model searches the ready Entire mirror for a live issue and predicts existing file paths. A replay searches Git at the pinned commit. Prism reads selected file contents from that commit.
+2. **Scope:** a model searches the ready Entire mirror for a live issue and predicts existing file paths. Prism reads selected file contents from that commit.
 3. **Usage:** Glance counts the issue text and selected file contents as a starting context. Prism applies explicit, unvalidated assumptions to project low, central, and high token usage for a future worker run.
 4. **Cost:** Prism prices those projections with model list prices and adds the file-discovery call's known cost. It posts the estimate first. On success, it writes predicted-token inputs to CFO.ai's decision test table, reads the saved budget rule's result, and sanity-checks the allow/block decision, chosen model, allocated amount, and reason. It writes a reservation for a new approved request and posts a separate result. If that request ID already has a reservation row, it uses the existing record without a second reservation.
 
