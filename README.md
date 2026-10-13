@@ -34,6 +34,8 @@ Or run without installing: `uvx --from git+https://github.com/Bhavya031/Prisme.g
 
 In a benchmark of 15 real open-source issues, Claude Sonnet found 73% of fix files on average (71% precision; 5 of 15 exact file sets). OpenAI GPT-6 Sol found 83% (62% precision; 3 of 15 exact). Estimated file-discovery cost was about $0.71 total for 60 model calls. It measures file prediction only, not cost-estimate accuracy or completed fixes.
 
+In an earlier 5-issue run using Entire code search on indexed mirrors, Claude Sonnet found 82% of fix files (74% precision) and OpenAI GPT-6 Sol found 85% (72% precision); results are in [data/results/v2-pipeline.json](data/results/v2-pipeline.json).
+
 ## Evidence: real runs
 
 Each issue below has both Prism comments: the estimate with predicted files and the budget allocation.
