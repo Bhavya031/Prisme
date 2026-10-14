@@ -1,5 +1,5 @@
 <h1 align="center">Superintelligence needs a budget.</h1>
-<p align="center"><strong>On 30 real GitHub issues, Prism found 82% of the files the real fix changed, using Entire search, at about 2 cents per estimate.</strong><br><sub>Claude Sonnet; mean across two repeats per issue.</sub></p>
+<p align="center"><strong>On 30 real GitHub issues, Prism found 82% of the files the real fix changed, using Entire search, at about 2 cents of model spend per file prediction.</strong><br><sub>Claude Sonnet; mean across two repeats per issue.</sub></p>
 <p align="center">Powered by</p>
 <p align="center">
   <a href="https://cfo.ai/"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/logos/cfo-dark.svg"><img src="docs/assets/logos/cfo-light.svg" alt="CFO.ai" height="30"></picture></a>&nbsp;&nbsp;&nbsp;
@@ -19,9 +19,9 @@ One issue goes in. Prism predicts the existing files a fix will touch. The score
 | **Precision** | **66.7%** | **64.8%** |
 | **Exact file sets** | **10 / 60** | **9 / 60** |
 | **Total discovery cost** | **$1.30** | **$0.88** |
-| **Cost / estimate** | **2.16¢** | **1.47¢** |
+| **File-finding cost per prediction** | **2.16¢** | **1.47¢** |
 
-Recall and precision are the means of per-issue scores across both repeats. Costs are token-based list-price estimates for file discovery.
+Recall and precision are the means of per-issue scores across both repeats. Costs are token-based list-price estimates for file discovery, excluding the rest of Prism's scope, usage, cost, and allocation workflow.
 
 ## How it was run
 

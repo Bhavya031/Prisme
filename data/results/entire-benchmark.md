@@ -5,7 +5,7 @@ All five public snapshot repositories were verified at their recorded main-branc
 
 ## Totals
 
-| Provider | Mean recall | Mean precision | Exact sets | Estimated cost | Repeat 1 → 2 (recall, precision, exact) |
+| Provider | Mean recall | Mean precision | Exact sets | Estimated discovery model cost | Repeat 1 → 2 (recall, precision, exact) |
 |---|---:|---:|---:|---:|---|
 | Claude | 81.8% | 66.7% | 10/60 | $1.297018 | 82.1% → 81.5%; 66.2% → 67.1%; 4 → 6 |
 | OpenAI | 76.5% | 64.8% | 9/60 | $0.882914 | 73.1% → 79.8%; 61.8% → 67.8%; 4 → 5 |
@@ -14,7 +14,7 @@ Each case counts equally in the means. Across the two repeats, Claude’s mean r
 
 ## Cases
 
-R/P is recall/precision in percent, shown as repeat 1 → repeat 2. Each cost is the sum of both repeats.
+R/P is recall/precision in percent, shown as repeat 1 → repeat 2. Each cost is the file-discovery model spend for both repeats, excluding the rest of Prism's scope, usage, cost, and allocation workflow.
 
 | Issue | Fix PR | Frozen snapshot | Claude R/P | Claude cost | OpenAI R/P | OpenAI cost |
 |---|---|---|---:|---:|---:|---:|

@@ -32,7 +32,7 @@ Or run without installing: `uvx --from git+https://github.com/Bhavya031/Prisme.g
 
 ## Results
 
-See the [Entire benchmark](BENCHMARK.md) for the frozen-snapshot results and every real issue/fix pair.
+See the [Entire file-prediction benchmark](BENCHMARK.md) for the frozen-snapshot results and every real issue/fix pair.
 
 In a benchmark of 15 real open-source issues, Claude Sonnet found 73% of fix files on average (71% precision; 5 of 15 exact file sets). OpenAI GPT-6 Sol found 83% (62% precision; 3 of 15 exact). Estimated file-discovery cost was about $0.71 total for 60 model calls. It measures file prediction only, not cost-estimate accuracy or completed fixes.
 
