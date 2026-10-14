@@ -8,437 +8,10 @@
     "openai": 2.0
   },
   "estimated_spend_usd": {
-    "claude": 1.297018,
-    "openai": 0.8829140000000004
+    "claude": 1.256724,
+    "openai": 0.8576572
   },
   "cases": [
-    {
-      "id": "flask#3193",
-      "issue_url": "https://github.com/pallets/flask/issues/3193",
-      "pr_url": "https://github.com/pallets/flask/pull/6133",
-      "snapshot_repo": "https://github.com/prism-benchmarks/flask",
-      "entire_repo": "gh/prism-benchmarks/flask",
-      "snapshot_sha": "ad68a12645d96fe51558da13e18544ba458d7af0",
-      "pr_pre_merge_sha": "3596b1ab61cea85edb8970e83ff61daa073facf8",
-      "actual_files": [
-        "CHANGES.rst",
-        "src/flask/sansio/scaffold.py",
-        "tests/test_basic.py"
-      ],
-      "results": {
-        "claude": {
-          "provider": "claude",
-          "by_category": {
-            "fix": [
-              "docs/reqcontext.rst",
-              "src/flask/globals.py"
-            ],
-            "tests": [],
-            "changelog": [
-              "CHANGES.rst"
-            ],
-            "docs": [
-              "docs/api.rst",
-              "docs/reqcontext.rst"
-            ],
-            "config": []
-          },
-          "predicted": [
-            "CHANGES.rst",
-            "docs/api.rst",
-            "docs/reqcontext.rst",
-            "src/flask/globals.py"
-          ],
-          "dropped_nonexistent": [],
-          "model_calls": 2,
-          "need_more_used": false,
-          "condensed": false,
-          "usage": {
-            "input": 7945,
-            "output": 404,
-            "cached_input": 0,
-            "cache_write": 0,
-            "reasoning": null
-          },
-          "estimated_cost_usd": 0.01993,
-          "budget": {
-            "max_cost_usd": null,
-            "max_output_tokens": 4000,
-            "max_extra_rounds": 1,
-            "timeout_seconds": null,
-            "extra_rounds_used": 0,
-            "stopped_by": null,
-            "over_max_cost": false,
-            "note": "Cost is an estimate from token counts and list prices, checked after every model call. One call can cross max_cost_usd before its usage is known; further calls stop once the estimate reaches it."
-          },
-          "discovery": {
-            "source": "entire",
-            "command": "entire search --code",
-            "pinned_commit": null,
-            "line_text_from": "Entire index",
-            "terms": [
-              "session",
-              "LocalProxy",
-              "_get_current_object",
-              "copy_current_request_context",
-              "thread-locals",
-              "request context",
-              "_cv_request",
-              "has_request_context"
-            ],
-            "hits_per_term": {
-              "session": 30,
-              "LocalProxy": 15,
-              "_get_current_object": 19,
-              "copy_current_request_context": 9,
-              "thread-locals": 0,
-              "request context": 30,
-              "_cv_request": 20,
-              "has_request_context": 11
-            },
-            "candidates_kept": [
-              "CHANGES.rst",
-              "docs/api.rst",
-              "docs/appcontext.rst",
-              "docs/logging.rst",
-              "docs/reqcontext.rst",
-              "docs/signals.rst",
-              "src/flask/__init__.py",
-              "src/flask/app.py",
-              "src/flask/cli.py",
-              "src/flask/ctx.py",
-              "src/flask/globals.py",
-              "src/flask/helpers.py",
-              "src/flask/logging.py",
-              "src/flask/sansio/app.py",
-              "src/flask/sansio/scaffold.py",
-              "src/flask/sessions.py",
-              "src/flask/templating.py",
-              "tests/conftest.py",
-              "tests/test_appctx.py",
-              "tests/test_basic.py",
-              "tests/test_cli.py",
-              "tests/test_logging.py",
-              "tests/test_reqctx.py",
-              "tests/test_testing.py"
-            ],
-            "candidates_dropped": [],
-            "entire_index_freshness": "unavailable",
-            "snapshot_commit": "ad68a12645d96fe51558da13e18544ba458d7af0"
-          },
-          "precision": 0.25,
-          "recall": 0.3333333333333333,
-          "exact_match": false,
-          "neatlogs_trace_id": "67c9533a3ac1e1017c3bc4ccb8e95835"
-        },
-        "openai": {
-          "provider": "openai",
-          "by_category": {
-            "fix": [],
-            "tests": [],
-            "changelog": [],
-            "docs": [],
-            "config": []
-          },
-          "predicted": [],
-          "dropped_nonexistent": [],
-          "model_calls": 2,
-          "need_more_used": false,
-          "condensed": false,
-          "usage": {
-            "input": 4752,
-            "output": 401,
-            "cached_input": 0,
-            "cache_write": 0,
-            "reasoning": 228
-          },
-          "estimated_cost_usd": 0.013514,
-          "budget": {
-            "max_cost_usd": null,
-            "max_output_tokens": 4000,
-            "max_extra_rounds": 1,
-            "timeout_seconds": null,
-            "extra_rounds_used": 0,
-            "stopped_by": null,
-            "over_max_cost": false,
-            "note": "Cost is an estimate from token counts and list prices, checked after every model call. One call can cross max_cost_usd before its usage is known; further calls stop once the estimate reaches it."
-          },
-          "discovery": {
-            "source": "entire",
-            "command": "entire search --code",
-            "pinned_commit": null,
-            "line_text_from": "Entire index",
-            "terms": [
-              "session",
-              "flask.session",
-              "LocalProxy",
-              "_get_current_object",
-              "request context",
-              "request_ctx",
-              "thread locals",
-              "copy_current_request_context",
-              "app context"
-            ],
-            "hits_per_term": {
-              "session": 30,
-              "flask.session": 30,
-              "LocalProxy": 15,
-              "_get_current_object": 19,
-              "request context": 30,
-              "request_ctx": 26,
-              "thread locals": 2,
-              "copy_current_request_context": 9,
-              "app context": 30
-            },
-            "candidates_kept": [
-              "CHANGES.rst",
-              "docs/api.rst",
-              "docs/appcontext.rst",
-              "docs/design.rst",
-              "docs/reqcontext.rst",
-              "docs/signals.rst",
-              "src/flask/__init__.py",
-              "src/flask/app.py",
-              "src/flask/cli.py",
-              "src/flask/ctx.py",
-              "src/flask/debughelpers.py",
-              "src/flask/globals.py",
-              "src/flask/helpers.py",
-              "src/flask/json/tag.py",
-              "src/flask/logging.py",
-              "src/flask/sansio/app.py",
-              "src/flask/sansio/scaffold.py",
-              "src/flask/sessions.py",
-              "src/flask/templating.py",
-              "src/flask/wrappers.py",
-              "tests/conftest.py",
-              "tests/test_appctx.py",
-              "tests/test_basic.py",
-              "tests/test_cli.py",
-              "tests/test_logging.py",
-              "tests/test_reqctx.py",
-              "tests/test_request.py",
-              "tests/test_session_interface.py",
-              "tests/test_testing.py"
-            ],
-            "candidates_dropped": [],
-            "entire_index_freshness": "unavailable",
-            "snapshot_commit": "ad68a12645d96fe51558da13e18544ba458d7af0"
-          },
-          "precision": 0,
-          "recall": 0.0,
-          "exact_match": false,
-          "neatlogs_trace_id": "655e701391ce341584b6c15187d784de"
-        }
-      },
-      "repeat_2": {
-        "claude": {
-          "provider": "claude",
-          "by_category": {
-            "fix": [
-              "docs/appcontext.rst",
-              "docs/reqcontext.rst"
-            ],
-            "tests": [],
-            "changelog": [
-              "CHANGES.rst"
-            ],
-            "docs": [
-              "docs/api.rst",
-              "docs/appcontext.rst",
-              "docs/reqcontext.rst"
-            ],
-            "config": []
-          },
-          "predicted": [
-            "CHANGES.rst",
-            "docs/api.rst",
-            "docs/appcontext.rst",
-            "docs/reqcontext.rst"
-          ],
-          "dropped_nonexistent": [],
-          "model_calls": 2,
-          "need_more_used": false,
-          "condensed": false,
-          "usage": {
-            "input": 8012,
-            "output": 434,
-            "cached_input": 0,
-            "cache_write": 0,
-            "reasoning": null
-          },
-          "estimated_cost_usd": 0.020364,
-          "budget": {
-            "max_cost_usd": null,
-            "max_output_tokens": 4000,
-            "max_extra_rounds": 1,
-            "timeout_seconds": null,
-            "extra_rounds_used": 0,
-            "stopped_by": null,
-            "over_max_cost": false,
-            "note": "Cost is an estimate from token counts and list prices, checked after every model call. One call can cross max_cost_usd before its usage is known; further calls stop once the estimate reaches it."
-          },
-          "discovery": {
-            "source": "entire",
-            "command": "entire search --code",
-            "pinned_commit": null,
-            "line_text_from": "Entire index",
-            "terms": [
-              "session",
-              "copy_current_request_context",
-              "_get_current_object",
-              "LocalProxy",
-              "thread-locals",
-              "contextvars",
-              "has_request_context",
-              "app_context"
-            ],
-            "hits_per_term": {
-              "session": 30,
-              "copy_current_request_context": 9,
-              "_get_current_object": 19,
-              "LocalProxy": 15,
-              "thread-locals": 0,
-              "contextvars": 11,
-              "has_request_context": 11,
-              "app_context": 30
-            },
-            "candidates_kept": [
-              "CHANGES.rst",
-              "docs/api.rst",
-              "docs/appcontext.rst",
-              "docs/logging.rst",
-              "docs/reqcontext.rst",
-              "docs/signals.rst",
-              "pyproject.toml",
-              "src/flask/__init__.py",
-              "src/flask/app.py",
-              "src/flask/cli.py",
-              "src/flask/ctx.py",
-              "src/flask/globals.py",
-              "src/flask/helpers.py",
-              "src/flask/logging.py",
-              "src/flask/sansio/app.py",
-              "src/flask/sansio/blueprints.py",
-              "src/flask/sansio/scaffold.py",
-              "src/flask/sessions.py",
-              "src/flask/templating.py",
-              "tests/conftest.py",
-              "tests/test_appctx.py",
-              "tests/test_basic.py",
-              "tests/test_cli.py",
-              "tests/test_logging.py",
-              "tests/test_reqctx.py",
-              "tests/test_testing.py",
-              "uv.lock"
-            ],
-            "candidates_dropped": [],
-            "entire_index_freshness": "unavailable",
-            "snapshot_commit": "ad68a12645d96fe51558da13e18544ba458d7af0"
-          },
-          "precision": 0.25,
-          "recall": 0.3333333333333333,
-          "exact_match": false,
-          "neatlogs_trace_id": "03fe2f9c82010a65c878026c30ad982b"
-        },
-        "openai": {
-          "provider": "openai",
-          "by_category": {
-            "fix": [],
-            "tests": [],
-            "changelog": [],
-            "docs": [],
-            "config": []
-          },
-          "predicted": [],
-          "dropped_nonexistent": [],
-          "model_calls": 2,
-          "need_more_used": false,
-          "condensed": false,
-          "usage": {
-            "input": 4694,
-            "output": 445,
-            "cached_input": 1164,
-            "cache_write": 0,
-            "reasoning": 250
-          },
-          "estimated_cost_usd": 0.0117428,
-          "budget": {
-            "max_cost_usd": null,
-            "max_output_tokens": 4000,
-            "max_extra_rounds": 1,
-            "timeout_seconds": null,
-            "extra_rounds_used": 0,
-            "stopped_by": null,
-            "over_max_cost": false,
-            "note": "Cost is an estimate from token counts and list prices, checked after every model call. One call can cross max_cost_usd before its usage is known; further calls stop once the estimate reaches it."
-          },
-          "discovery": {
-            "source": "entire",
-            "command": "entire search --code",
-            "pinned_commit": null,
-            "line_text_from": "Entire index",
-            "terms": [
-              "session",
-              "LocalProxy",
-              "_get_current_object",
-              "copy_current_request_context",
-              "request context",
-              "thread locals",
-              "app context",
-              "docs/reqcontext.rst",
-              "docs/appcontext.rst"
-            ],
-            "hits_per_term": {
-              "session": 30,
-              "LocalProxy": 15,
-              "_get_current_object": 19,
-              "copy_current_request_context": 9,
-              "request context": 30,
-              "thread locals": 2,
-              "app context": 30,
-              "docs/reqcontext.rst": 0,
-              "docs/appcontext.rst": 0
-            },
-            "candidates_kept": [
-              "CHANGES.rst",
-              "docs/api.rst",
-              "docs/appcontext.rst",
-              "docs/design.rst",
-              "docs/reqcontext.rst",
-              "docs/signals.rst",
-              "src/flask/__init__.py",
-              "src/flask/app.py",
-              "src/flask/cli.py",
-              "src/flask/ctx.py",
-              "src/flask/globals.py",
-              "src/flask/helpers.py",
-              "src/flask/logging.py",
-              "src/flask/sansio/app.py",
-              "src/flask/sansio/scaffold.py",
-              "src/flask/sessions.py",
-              "src/flask/templating.py",
-              "src/flask/wrappers.py",
-              "tests/conftest.py",
-              "tests/test_appctx.py",
-              "tests/test_basic.py",
-              "tests/test_cli.py",
-              "tests/test_logging.py",
-              "tests/test_reqctx.py",
-              "tests/test_request.py",
-              "tests/test_testing.py"
-            ],
-            "candidates_dropped": [],
-            "entire_index_freshness": "unavailable",
-            "snapshot_commit": "ad68a12645d96fe51558da13e18544ba458d7af0"
-          },
-          "precision": 0,
-          "recall": 0.0,
-          "exact_match": false,
-          "neatlogs_trace_id": "143aaba493cafbeefd4e37ad1389a44b"
-        }
-      }
-    },
     {
       "id": "flask#6093",
       "issue_url": "https://github.com/pallets/flask/issues/6093",
@@ -12088,63 +11661,59 @@
     }
   ],
   "summary": {
-    "cases": 30,
+    "cases": 29,
     "repeats": 2,
-    "predictions": 120,
-    "entire_sourced": 120,
-    "trace_ids": 120,
-    "first_trace_readback_verified": {
-      "claude": "67c9533a3ac1e1017c3bc4ccb8e95835",
-      "openai": "655e701391ce341584b6c15187d784de"
-    },
+    "predictions": 116,
+    "entire_sourced": 116,
+    "trace_ids": 116,
     "providers": {
       "claude": {
-        "mean_recall": 0.8182539682539682,
-        "mean_precision": 0.666574074074074,
+        "mean_recall": 0.8349753694581281,
+        "mean_precision": 0.6809386973180077,
         "exact_matches": 10,
-        "estimated_cost_usd": 1.297018,
+        "estimated_cost_usd": 1.256724,
         "per_repeat": [
           {
-            "mean_recall": 0.821031746031746,
-            "mean_precision": 0.6618518518518518,
+            "mean_recall": 0.8378489326765188,
+            "mean_precision": 0.6760536398467433,
             "exact_matches": 4,
-            "estimated_cost_usd": 0.649266
+            "estimated_cost_usd": 0.629336
           },
           {
-            "mean_recall": 0.8154761904761905,
-            "mean_precision": 0.6712962962962963,
+            "mean_recall": 0.8321018062397372,
+            "mean_precision": 0.685823754789272,
             "exact_matches": 6,
-            "estimated_cost_usd": 0.647752
+            "estimated_cost_usd": 0.627388
           }
         ],
         "repeat_spread": {
-          "mean_recall_pp": 0.5555555555555536,
-          "mean_precision_pp": 0.9444444444444478,
+          "mean_recall_pp": 0.5747126436781658,
+          "mean_precision_pp": 0.9770114942528774,
           "exact_matches": 2
         }
       },
       "openai": {
-        "mean_recall": 0.7646825396825396,
-        "mean_precision": 0.6480555555555556,
+        "mean_recall": 0.7910509031198686,
+        "mean_precision": 0.6704022988505747,
         "exact_matches": 9,
-        "estimated_cost_usd": 0.882914,
+        "estimated_cost_usd": 0.8576572,
         "per_repeat": [
           {
-            "mean_recall": 0.7313492063492063,
-            "mean_precision": 0.6177777777777778,
+            "mean_recall": 0.756568144499179,
+            "mean_precision": 0.6390804597701149,
             "exact_matches": 4,
-            "estimated_cost_usd": 0.483716
+            "estimated_cost_usd": 0.470202
           },
           {
-            "mean_recall": 0.798015873015873,
-            "mean_precision": 0.6783333333333333,
+            "mean_recall": 0.8255336617405583,
+            "mean_precision": 0.7017241379310345,
             "exact_matches": 5,
-            "estimated_cost_usd": 0.399198
+            "estimated_cost_usd": 0.3874552
           }
         ],
         "repeat_spread": {
-          "mean_recall_pp": 6.666666666666665,
-          "mean_precision_pp": 6.055555555555559,
+          "mean_recall_pp": 6.896551724137934,
+          "mean_precision_pp": 6.264367816091965,
           "exact_matches": 1
         }
       }

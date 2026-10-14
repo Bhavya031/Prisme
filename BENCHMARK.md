@@ -1,5 +1,5 @@
 <h1 align="center">Superintelligence needs a budget.</h1>
-<p align="center"><strong>On 30 real GitHub issues, Prism found 82% of the files the real fix changed, using Entire search, at about 2 cents of model spend per file prediction.</strong><br><sub>Claude Sonnet; mean across two repeats per issue.</sub></p>
+<p align="center"><strong>On 29 real GitHub issues, Prism found 83% of the files the real fix changed, using Entire search, at about 2 cents of model spend per file prediction.</strong><br><sub>Claude Sonnet; mean across two repeats per issue.</sub></p>
 <p align="center">Powered by</p>
 <p align="center">
   <a href="https://cfo.ai/"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/logos/cfo-dark.svg"><img src="docs/assets/logos/cfo-light.svg" alt="CFO.ai" height="30"></picture></a>&nbsp;&nbsp;&nbsp;
@@ -15,21 +15,21 @@ One issue goes in. Prism predicts the existing files a fix will touch. The score
 
 | | Claude Sonnet | OpenAI GPT-6 Sol |
 |---|---:|---:|
-| **Recall** | **81.8%** | **76.5%** |
-| **Precision** | **66.7%** | **64.8%** |
-| **Exact file sets** | **10 / 60** | **9 / 60** |
-| **Total discovery cost** | **$1.30** | **$0.88** |
-| **File-finding cost per prediction** | **2.16¢** | **1.47¢** |
+| **Recall** | **83.5%** | **79.1%** |
+| **Precision** | **68.1%** | **67.0%** |
+| **Exact file sets** | **10 / 58** | **9 / 58** |
+| **Total discovery cost** | **$1.26** | **$0.86** |
+| **File-finding cost per prediction** | **2.17¢** | **1.48¢** |
 
 Recall and precision are the means of per-issue scores across both repeats. Costs are token-based list-price estimates for file discovery, excluding the rest of Prism's scope, usage, cost, and allocation workflow.
 
 ## How it was run
 
 - **5 frozen snapshot repos** in [prism-benchmarks](https://github.com/prism-benchmarks), each fixed at an upstream main-branch commit.
-- **30 real closed issues** whose fixing PRs merged after their project snapshot; ground truth is the modified files already present in that snapshot.
-- **Entire code search only** on the frozen mirror, with no search fallback; 120 / 120 saved predictions record `discovery.source=entire`.
+- **29 real closed issues** whose fixing PRs merged after their project snapshot; ground truth is the modified files already present in that snapshot.
+- **Entire code search only** on the frozen mirror, with no search fallback; 116 / 116 saved predictions record `discovery.source=entire`.
 - **2 repeats × 2 models** for each issue, scored against the same fix.
-- **Every run traced in NeatLogs:** 120 unique trace IDs; the first trace for each provider was read back before the remaining runs.
+- **Every saved run traced in NeatLogs:** 116 unique trace IDs.
 
 ![How Prism works](docs/assets/prism-flow.svg)
 
@@ -37,18 +37,17 @@ Recall and precision are the means of per-issue scores across both repeats. Cost
 
 | Frozen snapshot | Issues | Claude recall / precision | OpenAI recall / precision |
 |---|---:|---:|---:|
-| [flask@ad68a12645d9](https://github.com/prism-benchmarks/flask/tree/ad68a12645d96fe51558da13e18544ba458d7af0) | 6 | 80.0% / 60.1% | 76.8% / 63.6% |
+| [flask@ad68a12645d9](https://github.com/prism-benchmarks/flask/tree/ad68a12645d96fe51558da13e18544ba458d7af0) | 5 | 89.3% / 67.1% | 92.1% / 76.3% |
 | [requests@70298332899f](https://github.com/prism-benchmarks/requests/tree/70298332899f25826e35e42f8d83425124f755a5) | 6 | 91.7% / 41.2% | 83.3% / 36.9% |
 | [click@047adef258fc](https://github.com/prism-benchmarks/click/tree/047adef258fc25566163ffc3efd14effc0ef7352) | 6 | 77.8% / 65.3% | 61.1% / 63.3% |
 | [pytest@3b17fa79f8ad](https://github.com/prism-benchmarks/pytest/tree/3b17fa79f8ad28bbda7aa468a750605be9c24553) | 6 | 66.7% / 88.9% | 66.7% / 86.1% |
 | [pydantic@f512b087202f](https://github.com/prism-benchmarks/pydantic/tree/f512b087202f58ec90a9d38c9102858567d72440) | 6 | 93.1% / 77.8% | 94.4% / 74.0% |
 
 <details>
-<summary><strong>All 30 issues and real fixes</strong> — recall by model, repeat 1 / repeat 2</summary>
+<summary><strong>All 29 issues and real fixes</strong> — recall by model, repeat 1 / repeat 2</summary>
 
 | Issue | Fix PR | Frozen snapshot | Claude recall | OpenAI recall |
 |---|---|---|---:|---:|
-| [flask #3193](https://github.com/pallets/flask/issues/3193) | [#6133](https://github.com/pallets/flask/pull/6133) | [flask@ad68a12645d9](https://github.com/prism-benchmarks/flask/tree/ad68a12645d96fe51558da13e18544ba458d7af0) | 33% / 33% | 0% / 0% |
 | [flask #6093](https://github.com/pallets/flask/issues/6093) | [#6096](https://github.com/pallets/flask/pull/6096) | [flask@ad68a12645d9](https://github.com/prism-benchmarks/flask/tree/ad68a12645d96fe51558da13e18544ba458d7af0) | 100% / 100% | 100% / 100% |
 | [flask #5961](https://github.com/pallets/flask/issues/5961) | [#5962](https://github.com/pallets/flask/pull/5962) | [flask@ad68a12645d9](https://github.com/prism-benchmarks/flask/tree/ad68a12645d96fe51558da13e18544ba458d7af0) | 100% / 100% | 100% / 100% |
 | [flask #5916](https://github.com/pallets/flask/issues/5916) | [#5917](https://github.com/pallets/flask/pull/5917) | [flask@ad68a12645d9](https://github.com/prism-benchmarks/flask/tree/ad68a12645d96fe51558da13e18544ba458d7af0) | 71% / 71% | 86% / 86% |
@@ -85,6 +84,7 @@ Recall and precision are the means of per-issue scores across both repeats. Cost
 
 - The sample covers five Python projects. It does not establish accuracy across other languages, project sizes, or issue types.
 - An agent chose the issues using the stated closed-issue, merged-fix, and existing-file rules. This is a selected sample, not a random draw.
+- Flask #3193 was excluded because its linked PR did not fix the issue described to the models.
 - This run has no without-Entire baseline, so it does not measure the effect of switching the search source.
 - It measures file prediction, not whether a coding agent would complete the fix. Discovery costs are estimates, not provider invoice totals.
 
