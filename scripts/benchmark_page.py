@@ -61,8 +61,6 @@ def rp(c, p):
 
 claude, openai = (summary["providers"][p] for p in PROVIDERS)
 lines = [
-    '<p align="center"><img src="docs/assets/benchmark-poster.webp" alt="Prism Entire benchmark poster" width="100%"></p>',
-    "",
     "# Entire file-prediction benchmark",
     "",
     f"Run {data['date']} at Prism commit [`{data['source_commit'][:7]}`](https://github.com/Bhavya031/Prisme/commit/{data['source_commit']}). "
@@ -231,4 +229,5 @@ for c in data["cases"]:
             )
     lines += ["", "</details>", ""]
 
+lines.append('<p align="center"><img src="docs/assets/benchmark-poster.webp" alt="Prism Entire benchmark poster" width="100%"></p>')
 (ROOT / "BENCHMARK.md").write_text("\n".join(lines).rstrip() + "\n")
