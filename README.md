@@ -50,6 +50,8 @@ Each issue below has both Prism comments: the estimate with predicted files and 
 | Bhavya031/k-2 | [#48 Trim surrounding whitespace in offline report search](https://github.com/Bhavya031/k-2/issues/48) |
 | Bhavya031/k-2 | [#47 Show document page numbers on offline report exceptions](https://github.com/Bhavya031/k-2/issues/47) |
 
+[Live CFO.ai budget dashboard](https://cfo.ai/s/7nP1l9E8l6ebolGG)
+
 The open-source forks already contain the upstream fixes, so these show the workflow end to end; the accuracy numbers come from the 15-issue benchmark above.
 
 ## Set up the workflow on your repo
@@ -195,9 +197,9 @@ Prism is a Python CLI with example GitHub Actions workflows. An eligible issue o
 |---|---|
 | [Entire](https://entire.io/) | Provides the searchable mirror that names candidate files for live issues; Prism reads their contents from the pinned Git commit. |
 | [Anthropic](https://www.anthropic.com/) and [OpenAI](https://openai.com/) | Claude or OpenAI predicts likely files. Select one with `estimate.provider`; the shared portfolio config selects OpenAI. |
-| [Glance](https://github.com/Bhavya031/Glance) | Counts the exact starting context bytes that Prism assembles; it does not pick files or estimate the whole worker run. |
+| [Glance](https://github.com/Bhavya031/Glance) | Counts the exact starting context bytes that Prism assembles; it does not pick files or estimate the whole worker run. Built by us during the hackathon on 2026-10-10 alongside Prism, it ships [prebuilt binaries](https://github.com/Bhavya031/Glance/releases/latest) for macOS, Linux, and Windows (amd64 and arm64). |
 | [Neatlogs](https://neatlogs.com/) | Optional tracing for Prism's model workflow when `NEATLOGS_API_KEY` is set. It does not determine scope, usage, cost, or allocation. |
-| [CFO.ai](https://cfo.ai/) | Holds the saved budget rule and its decision test, budget, and request tables. Prism reads the rule's result, checks it, and records approved reservations through CFO.ai model tools. |
+| [CFO.ai](https://cfo.ai/) | Holds the saved budget rule and its decision test, budget, and request tables. Prism reads the rule's result, checks it, and records approved reservations through CFO.ai model tools. [Live CFO.ai budget dashboard](https://cfo.ai/s/7nP1l9E8l6ebolGG). |
 
 ## What appears on the issue
 
