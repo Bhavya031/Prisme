@@ -6,6 +6,8 @@
   <a href="https://neatlogs.com/"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/logos/neatlogs-dark.svg"><img src="docs/assets/logos/neatlogs-light.svg" alt="neatlogs" height="30"></picture></a>
 </p>
 
+<div align="center"><h2>Our original X post was accidentally deleted. New post: <a href="https://x.com/Bhavyao31/status/2110383693982499286">https://x.com/Bhavyao31/status/2110383693982499286</a></h2></div>
+
 ![Prism: automated estimation and allocation](docs/assets/prism-poster.webp)
 
 ## Try it yourself
