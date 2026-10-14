@@ -1,0 +1,58 @@
+# Entire file-prediction benchmark — 14 October 2026
+
+**30 real closed issues × 2 providers × 2 repeats = 120 predictions. Entire discovery: 120/120.**
+All five public snapshot repositories were verified at their recorded main-branch commits, reported ready in Entire, and returned code-search hits before paid calls. The first Claude and OpenAI traces were read back from NeatLogs; every saved prediction has a unique trace ID.
+
+## Totals
+
+| Provider | Mean recall | Mean precision | Exact sets | Estimated cost | Repeat 1 → 2 (recall, precision, exact) |
+|---|---:|---:|---:|---:|---|
+| Claude | 81.8% | 66.7% | 10/60 | $1.297018 | 82.1% → 81.5%; 66.2% → 67.1%; 4 → 6 |
+| OpenAI | 76.5% | 64.8% | 9/60 | $0.882914 | 73.1% → 79.8%; 61.8% → 67.8%; 4 → 5 |
+
+Each case counts equally in the means. Across the two repeats, Claude’s mean recall changed by 0.6 percentage points and precision by 0.9; OpenAI’s changed by 6.7 and 6.1 points. Exact sets changed by 2 for Claude and 1 for OpenAI.
+
+## Cases
+
+R/P is recall/precision in percent, shown as repeat 1 → repeat 2. Each cost is the sum of both repeats.
+
+| Issue | Fix PR | Frozen snapshot | Claude R/P | Claude cost | OpenAI R/P | OpenAI cost |
+|---|---|---|---:|---:|---:|---:|
+| [flask #3193](https://github.com/pallets/flask/issues/3193) | [#6133](https://github.com/pallets/flask/pull/6133) | [flask@ad68a12645d9](https://github.com/prism-benchmarks/flask/tree/ad68a12645d96fe51558da13e18544ba458d7af0) | 33.3/25.0 → 33.3/25.0 | $0.040294 | 0.0/0.0 → 0.0/0.0 | $0.025257 |
+| [flask #6093](https://github.com/pallets/flask/issues/6093) | [#6096](https://github.com/pallets/flask/pull/6096) | [flask@ad68a12645d9](https://github.com/prism-benchmarks/flask/tree/ad68a12645d96fe51558da13e18544ba458d7af0) | 100.0/80.0 → 100.0/80.0 | $0.035350 | 100.0/80.0 → 100.0/80.0 | $0.024195 |
+| [flask #5961](https://github.com/pallets/flask/issues/5961) | [#5962](https://github.com/pallets/flask/pull/5962) | [flask@ad68a12645d9](https://github.com/prism-benchmarks/flask/tree/ad68a12645d96fe51558da13e18544ba458d7af0) | 100.0/50.0 → 100.0/50.0 | $0.050464 | 100.0/100.0 → 100.0/100.0 | $0.029297 |
+| [flask #5916](https://github.com/pallets/flask/issues/5916) | [#5917](https://github.com/pallets/flask/pull/5917) | [flask@ad68a12645d9](https://github.com/prism-benchmarks/flask/tree/ad68a12645d96fe51558da13e18544ba458d7af0) | 71.4/55.6 → 71.4/55.6 | $0.053494 | 85.7/66.7 → 85.7/66.7 | $0.038404 |
+| [flask #5816](https://github.com/pallets/flask/issues/5816) | [#5899](https://github.com/pallets/flask/pull/5899) | [flask@ad68a12645d9](https://github.com/prism-benchmarks/flask/tree/ad68a12645d96fe51558da13e18544ba458d7af0) | 100.0/75.0 → 100.0/75.0 | $0.038866 | 100.0/75.0 → 100.0/75.0 | $0.030910 |
+| [flask #5895](https://github.com/pallets/flask/issues/5895) | [#5898](https://github.com/pallets/flask/pull/5898) | [flask@ad68a12645d9](https://github.com/prism-benchmarks/flask/tree/ad68a12645d96fe51558da13e18544ba458d7af0) | 75.0/75.0 → 75.0/75.0 | $0.037258 | 75.0/60.0 → 75.0/60.0 | $0.027318 |
+| [requests #7432](https://github.com/psf/requests/issues/7432) | [#7433](https://github.com/psf/requests/pull/7433) | [requests@70298332899f](https://github.com/prism-benchmarks/requests/tree/70298332899f25826e35e42f8d83425124f755a5) | 100.0/66.7 → 100.0/66.7 | $0.028450 | 100.0/66.7 → 100.0/66.7 | $0.019540 |
+| [requests #4795](https://github.com/psf/requests/issues/4795) | [#7427](https://github.com/psf/requests/pull/7427) | [requests@70298332899f](https://github.com/prism-benchmarks/requests/tree/70298332899f25826e35e42f8d83425124f755a5) | 100.0/66.7 → 100.0/66.7 | $0.045728 | 100.0/66.7 → 100.0/66.7 | $0.026931 |
+| [requests #7375](https://github.com/psf/requests/issues/7375) | [#7376](https://github.com/psf/requests/pull/7376) | [requests@70298332899f](https://github.com/prism-benchmarks/requests/tree/70298332899f25826e35e42f8d83425124f755a5) | 100.0/33.3 → 100.0/33.3 | $0.024336 | 100.0/33.3 → 100.0/33.3 | $0.020564 |
+| [requests #6810](https://github.com/psf/requests/issues/6810) | [#7310](https://github.com/psf/requests/pull/7310) | [requests@70298332899f](https://github.com/prism-benchmarks/requests/tree/70298332899f25826e35e42f8d83425124f755a5) | 100.0/25.0 → 100.0/25.0 | $0.032760 | 100.0/20.0 → 100.0/20.0 | $0.023753 |
+| [requests #5436](https://github.com/psf/requests/issues/5436) | [#7244](https://github.com/psf/requests/pull/7244) | [requests@70298332899f](https://github.com/prism-benchmarks/requests/tree/70298332899f25826e35e42f8d83425124f755a5) | 100.0/25.0 → 100.0/20.0 | $0.029278 | 0.0/0.0 → 100.0/20.0 | $0.029310 |
+| [requests #7219](https://github.com/psf/requests/issues/7219) | [#7220](https://github.com/psf/requests/pull/7220) | [requests@70298332899f](https://github.com/prism-benchmarks/requests/tree/70298332899f25826e35e42f8d83425124f755a5) | 50.0/33.3 → 50.0/33.3 | $0.028808 | 50.0/25.0 → 50.0/25.0 | $0.029642 |
+| [click #3802](https://github.com/pallets/click/issues/3802) | [#3818](https://github.com/pallets/click/pull/3818) | [click@047adef258fc](https://github.com/prism-benchmarks/click/tree/047adef258fc25566163ffc3efd14effc0ef7352) | 66.7/66.7 → 66.7/66.7 | $0.037576 | 66.7/50.0 → 66.7/50.0 | $0.031567 |
+| [click #2869](https://github.com/pallets/click/issues/2869) | [#3781](https://github.com/pallets/click/pull/3781) | [click@047adef258fc](https://github.com/prism-benchmarks/click/tree/047adef258fc25566163ffc3efd14effc0ef7352) | 100.0/100.0 → 100.0/100.0 | $0.026248 | 100.0/80.0 → 100.0/80.0 | $0.031058 |
+| [click #2582](https://github.com/pallets/click/issues/2582) | [#3780](https://github.com/pallets/click/pull/3780) | [click@047adef258fc](https://github.com/prism-benchmarks/click/tree/047adef258fc25566163ffc3efd14effc0ef7352) | 0.0/0.0 → 0.0/0.0 | $0.033422 | 0.0/0.0 → 0.0/0.0 | $0.026536 |
+| [click #3571](https://github.com/pallets/click/issues/3571) | [#3769](https://github.com/pallets/click/pull/3769) | [click@047adef258fc](https://github.com/prism-benchmarks/click/tree/047adef258fc25566163ffc3efd14effc0ef7352) | 100.0/100.0 → 100.0/100.0 | $0.024058 | 100.0/100.0 → 100.0/100.0 | $0.018760 |
+| [click #3135](https://github.com/pallets/click/issues/3135) | [#3819](https://github.com/pallets/click/pull/3819) | [click@047adef258fc](https://github.com/prism-benchmarks/click/tree/047adef258fc25566163ffc3efd14effc0ef7352) | 100.0/66.7 → 100.0/100.0 | $0.025576 | 50.0/100.0 → 50.0/100.0 | $0.023766 |
+| [click #1054](https://github.com/pallets/click/issues/1054) | [#3820](https://github.com/pallets/click/pull/3820) | [click@047adef258fc](https://github.com/prism-benchmarks/click/tree/047adef258fc25566163ffc3efd14effc0ef7352) | 100.0/33.3 → 100.0/50.0 | $0.036094 | 0.0/0.0 → 100.0/100.0 | $0.023923 |
+| [pytest #12223](https://github.com/pytest-dev/pytest/issues/12223) | [#15150](https://github.com/pytest-dev/pytest/pull/15150) | [pytest@3b17fa79f8ad](https://github.com/prism-benchmarks/pytest/tree/3b17fa79f8ad28bbda7aa468a750605be9c24553) | 100.0/66.7 → 100.0/100.0 | $0.055248 | 100.0/66.7 → 100.0/100.0 | $0.034147 |
+| [pytest #12175](https://github.com/pytest-dev/pytest/issues/12175) | [#15149](https://github.com/pytest-dev/pytest/pull/15149) | [pytest@3b17fa79f8ad](https://github.com/prism-benchmarks/pytest/tree/3b17fa79f8ad28bbda7aa468a750605be9c24553) | 66.7/100.0 → 66.7/100.0 | $0.054382 | 66.7/100.0 → 66.7/100.0 | $0.027507 |
+| [pytest #6750](https://github.com/pytest-dev/pytest/issues/6750) | [#15058](https://github.com/pytest-dev/pytest/pull/15058) | [pytest@3b17fa79f8ad](https://github.com/prism-benchmarks/pytest/tree/3b17fa79f8ad28bbda7aa468a750605be9c24553) | 66.7/100.0 → 66.7/100.0 | $0.078474 | 66.7/66.7 → 66.7/100.0 | $0.046601 |
+| [pytest #15052](https://github.com/pytest-dev/pytest/issues/15052) | [#15053](https://github.com/pytest-dev/pytest/pull/15053) | [pytest@3b17fa79f8ad](https://github.com/prism-benchmarks/pytest/tree/3b17fa79f8ad28bbda7aa468a750605be9c24553) | 33.3/50.0 → 33.3/50.0 | $0.047286 | 33.3/50.0 → 33.3/50.0 | $0.029503 |
+| [pytest #15043](https://github.com/pytest-dev/pytest/issues/15043) | [#15044](https://github.com/pytest-dev/pytest/pull/15044) | [pytest@3b17fa79f8ad](https://github.com/prism-benchmarks/pytest/tree/3b17fa79f8ad28bbda7aa468a750605be9c24553) | 66.7/100.0 → 66.7/100.0 | $0.048820 | 66.7/100.0 → 66.7/100.0 | $0.028214 |
+| [pytest #11783](https://github.com/pytest-dev/pytest/issues/11783) | [#15040](https://github.com/pytest-dev/pytest/pull/15040) | [pytest@3b17fa79f8ad](https://github.com/prism-benchmarks/pytest/tree/3b17fa79f8ad28bbda7aa468a750605be9c24553) | 66.7/100.0 → 66.7/100.0 | $0.069620 | 66.7/100.0 → 66.7/100.0 | $0.039426 |
+| [pydantic #13971](https://github.com/pydantic/pydantic/issues/13971) | [#13980](https://github.com/pydantic/pydantic/pull/13980) | [pydantic@f512b087202f](https://github.com/prism-benchmarks/pydantic/tree/f512b087202f58ec90a9d38c9102858567d72440) | 100.0/100.0 → 100.0/100.0 | $0.067134 | 100.0/100.0 → 100.0/66.7 | $0.040828 |
+| [pydantic #13976](https://github.com/pydantic/pydantic/issues/13976) | [#13978](https://github.com/pydantic/pydantic/pull/13978) | [pydantic@f512b087202f](https://github.com/prism-benchmarks/pydantic/tree/f512b087202f58ec90a9d38c9102858567d72440) | 100.0/100.0 → 50.0/50.0 | $0.046628 | 100.0/100.0 → 100.0/100.0 | $0.028918 |
+| [pydantic #13965](https://github.com/pydantic/pydantic/issues/13965) | [#13972](https://github.com/pydantic/pydantic/pull/13972) | [pydantic@f512b087202f](https://github.com/prism-benchmarks/pydantic/tree/f512b087202f58ec90a9d38c9102858567d72440) | 100.0/75.0 → 100.0/75.0 | $0.044706 | 100.0/60.0 → 100.0/75.0 | $0.032388 |
+| [pydantic #13919](https://github.com/pydantic/pydantic/issues/13919) | [#13967](https://github.com/pydantic/pydantic/pull/13967) | [pydantic@f512b087202f](https://github.com/prism-benchmarks/pydantic/tree/f512b087202f58ec90a9d38c9102858567d72440) | 100.0/66.7 → 100.0/66.7 | $0.059992 | 100.0/66.7 → 100.0/66.7 | $0.036455 |
+| [pydantic #13957](https://github.com/pydantic/pydantic/issues/13957) | [#13964](https://github.com/pydantic/pydantic/pull/13964) | [pydantic@f512b087202f](https://github.com/prism-benchmarks/pydantic/tree/f512b087202f58ec90a9d38c9102858567d72440) | 100.0/50.0 → 100.0/50.0 | $0.045588 | 100.0/20.0 → 100.0/33.3 | $0.030016 |
+| [pydantic #13950](https://github.com/pydantic/pydantic/issues/13950) | [#13951](https://github.com/pydantic/pydantic/pull/13951) | [pydantic@f512b087202f](https://github.com/prism-benchmarks/pydantic/tree/f512b087202f58ec90a9d38c9102858567d72440) | 66.7/100.0 → 100.0/100.0 | $0.051080 | 66.7/100.0 → 66.7/100.0 | $0.028181 |
+
+## Method and limits
+
+- Each snapshot repository contains upstream history only through its recorded commit; its default branch remains at that commit. Candidate paths and search snippets came from `entire search --code` on that mirror. No Git search or Git grep was used for predictions.
+- Issue text and references were cut off at the fixing PR’s creation. Ground truth is the fixing PR’s modified files that already existed in the snapshot; added files are outside this file-prediction target.
+- NeatLogs trace IDs are in the JSON for every prediction. Exact hosted readback was checked on the first result for each provider; later traces have IDs and SDK flush confirmation.
+- Costs are token-based list-price estimates, not provider invoices. Claude stayed below its $2.00 cap at $1.297018; OpenAI stayed below its $2.00 cap at $0.882914.
+- Thirty issues across five projects remain a limited sample; snapshot age differs by project.
