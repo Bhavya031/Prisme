@@ -1,7 +1,7 @@
 # Entire file-prediction benchmark — 14 October 2026
 
-**29 real closed issues × 2 providers × 2 repeats = 116 predictions. Entire discovery: 116/116.**
-All five public snapshot repositories were verified at their recorded main-branch commits, reported ready in Entire, and returned code-search hits before paid calls. Every saved prediction has a unique NeatLogs trace ID.
+**29 scored real closed issues × 2 providers × 2 repeats = 116 scored predictions; 120 recorded including one excluded case. Entire discovery: 120/120.**
+All five public snapshot repositories were verified at their recorded main-branch commits, reported ready in Entire, and returned code-search hits before paid calls. Every recorded prediction has a unique NeatLogs trace ID.
 
 ## Totals
 
@@ -10,7 +10,7 @@ All five public snapshot repositories were verified at their recorded main-branc
 | Claude | 83.5% | 68.1% | 10/58 | $1.256724 | 83.8% → 83.2%; 67.6% → 68.6%; 4 → 6 |
 | OpenAI | 79.1% | 67.0% | 9/58 | $0.857657 | 75.7% → 82.6%; 63.9% → 70.2%; 4 → 5 |
 
-Each case counts equally in the means. Across the two repeats, Claude’s mean recall changed by 0.6 percentage points and precision by 1.0; OpenAI’s changed by 6.9 and 6.3 points. Exact sets changed by 2 for Claude and 1 for OpenAI.
+Each scored case counts equally in the means. Scored discovery costs exclude Flask #3193; total model spend including that excluded case was $1.297018 for Claude and $0.882914 for OpenAI. Across the two repeats, Claude’s mean recall changed by 0.6 percentage points and precision by 1.0; OpenAI’s changed by 6.9 and 6.3 points. Exact sets changed by 2 for Claude and 1 for OpenAI.
 
 ## Cases
 
@@ -52,7 +52,7 @@ R/P is recall/precision in percent, shown as repeat 1 → repeat 2. Each cost is
 
 - Each snapshot repository contains upstream history only through its recorded commit; its default branch remains at that commit. Candidate paths and search snippets came from `entire search --code` on that mirror. No Git search or Git grep was used for predictions.
 - Issue text and references were cut off at the fixing PR’s creation. Ground truth is the fixing PR’s modified files that already existed in the snapshot; added files are outside this file-prediction target.
-- NeatLogs trace IDs are in the JSON for every retained prediction; the saved runs have SDK flush confirmation.
-- Costs are token-based list-price estimates, not provider invoices. Claude stayed below its $2.00 cap at $1.256724; OpenAI stayed below its $2.00 cap at $0.857657.
-- Flask #3193 was excluded because its linked PR did not fix the issue described to the models.
+- NeatLogs trace IDs are in the JSON for every recorded prediction; the saved runs have SDK flush confirmation.
+- Costs are token-based list-price estimates, not provider invoices. Including the excluded case, Claude stayed below its $2.00 cap at $1.297018; OpenAI stayed below its $2.00 cap at $0.882914.
+- Flask #3193's raw predictions remain in the JSON but are excluded from scores because fix PR #6133 does not address the reported session issue.
 - Twenty-nine issues across five projects remain a limited sample; snapshot age differs by project.

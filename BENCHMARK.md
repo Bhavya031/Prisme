@@ -18,18 +18,19 @@ One issue goes in. Prism predicts the existing files a fix will touch. The score
 | **Recall** | **83.5%** | **79.1%** |
 | **Precision** | **68.1%** | **67.0%** |
 | **Exact file sets** | **10 / 58** | **9 / 58** |
-| **Total discovery cost** | **$1.26** | **$0.86** |
+| **Scored discovery cost** | **$1.26** | **$0.86** |
 | **File-finding cost per prediction** | **2.17¢** | **1.48¢** |
+| **Total model spend, including excluded case** | **$1.30** | **$0.88** |
 
-Recall and precision are the means of per-issue scores across both repeats. Costs are token-based list-price estimates for file discovery, excluding the rest of Prism's scope, usage, cost, and allocation workflow.
+Recall and precision are the means of per-issue scores across both repeats. Scored cost and cost per prediction use the 116 included predictions; total model spend includes four predictions from the excluded case. Costs are token-based list-price estimates for file discovery, excluding the rest of Prism's scope, usage, cost, and allocation workflow.
 
 ## How it was run
 
 - **5 frozen snapshot repos** in [prism-benchmarks](https://github.com/prism-benchmarks), each fixed at an upstream main-branch commit.
-- **29 real closed issues** whose fixing PRs merged after their project snapshot; ground truth is the modified files already present in that snapshot.
-- **Entire code search only** on the frozen mirror, with no search fallback; 116 / 116 saved predictions record `discovery.source=entire`.
+- **29 scored real closed issues** whose fixing PRs merged after their project snapshot; ground truth is the modified files already present in that snapshot.
+- **Entire code search only** on the frozen mirror, with no search fallback; 120 / 120 recorded predictions (116 scored) record `discovery.source=entire`.
 - **2 repeats × 2 models** for each issue, scored against the same fix.
-- **Every saved run traced in NeatLogs:** 116 unique trace IDs.
+- **Every recorded run traced in NeatLogs:** 120 unique trace IDs.
 
 ![How Prism works](docs/assets/prism-flow.svg)
 
@@ -84,7 +85,7 @@ Recall and precision are the means of per-issue scores across both repeats. Cost
 
 - The sample covers five Python projects. It does not establish accuracy across other languages, project sizes, or issue types.
 - An agent chose the issues using the stated closed-issue, merged-fix, and existing-file rules. This is a selected sample, not a random draw.
-- Flask #3193 was excluded because its linked PR did not fix the issue described to the models.
+- Flask #3193's four raw predictions remain in the JSON but are excluded from scoring because fix PR #6133 does not address the reported session issue.
 - This run has no without-Entire baseline, so it does not measure the effect of switching the search source.
 - It measures file prediction, not whether a coding agent would complete the fix. Discovery costs are estimates, not provider invoice totals.
 
