@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/assets/benchmark-poster.webp" alt="Prism benchmark: 84% of the files the real fix changed, 29 issues" width="100%"></p>
+<p align="center"><img src="docs/assets/benchmark-poster.webp" alt="Prism benchmark: 83.5% of the files the real fix changed, 29 issues" width="100%"></p>
 
 <h1 align="center">Superintelligence needs a budget.</h1>
 <p align="center"><strong>On 29 real GitHub issues, Prism found 83% of the files the real fix changed, using Entire search, at about 2 cents of model spend per file prediction.</strong><br><sub>Claude Sonnet; mean across two repeats per issue.</sub></p>
