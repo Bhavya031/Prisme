@@ -129,7 +129,11 @@
           "precision": 0.25,
           "recall": 0.3333333333333333,
           "exact_match": false,
-          "neatlogs_trace_id": "67c9533a3ac1e1017c3bc4ccb8e95835"
+          "neatlogs_trace_id": "67c9533a3ac1e1017c3bc4ccb8e95835",
+          "neatlogs_timing": {
+            "seconds": 11.861,
+            "started_at": "2026-10-14T07:52:23.207Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -228,7 +232,11 @@
           "precision": 0,
           "recall": 0.0,
           "exact_match": false,
-          "neatlogs_trace_id": "655e701391ce341584b6c15187d784de"
+          "neatlogs_trace_id": "655e701391ce341584b6c15187d784de",
+          "neatlogs_timing": {
+            "seconds": 12.042,
+            "started_at": "2026-10-14T07:52:38.383Z"
+          }
         }
       },
       "repeat_2": {
@@ -339,7 +347,11 @@
           "precision": 0.25,
           "recall": 0.3333333333333333,
           "exact_match": false,
-          "neatlogs_trace_id": "03fe2f9c82010a65c878026c30ad982b"
+          "neatlogs_trace_id": "03fe2f9c82010a65c878026c30ad982b",
+          "neatlogs_timing": {
+            "seconds": 9.02,
+            "started_at": "2026-10-14T08:07:47.653Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -435,7 +447,11 @@
           "precision": 0,
           "recall": 0.0,
           "exact_match": false,
-          "neatlogs_trace_id": "143aaba493cafbeefd4e37ad1389a44b"
+          "neatlogs_trace_id": "143aaba493cafbeefd4e37ad1389a44b",
+          "neatlogs_timing": {
+            "seconds": 12.821,
+            "started_at": "2026-10-14T08:07:58.496Z"
+          }
         }
       },
       "excluded_from_scoring": true,
@@ -550,7 +566,11 @@
           "precision": 0.8,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "a393ee90b2809305dc7af7d1a4a7243d"
+          "neatlogs_trace_id": "a393ee90b2809305dc7af7d1a4a7243d",
+          "neatlogs_timing": {
+            "seconds": 9.311,
+            "started_at": "2026-10-14T07:53:33.517Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -654,7 +674,11 @@
           "precision": 0.8,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "c1a7183177bbdf5924db32fe4ac97ebf"
+          "neatlogs_trace_id": "c1a7183177bbdf5924db32fe4ac97ebf",
+          "neatlogs_timing": {
+            "seconds": 12.128,
+            "started_at": "2026-10-14T07:53:47.057Z"
+          }
         }
       },
       "repeat_2": {
@@ -747,7 +771,11 @@
           "precision": 0.8,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "edd819211856fd9f9728c35c6cfb4b44"
+          "neatlogs_trace_id": "edd819211856fd9f9728c35c6cfb4b44",
+          "neatlogs_timing": {
+            "seconds": 7.374,
+            "started_at": "2026-10-14T08:08:13.043Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -845,7 +873,11 @@
           "precision": 0.8,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "4f306c1fd20c50ebcbe29ef7ceafa654"
+          "neatlogs_trace_id": "4f306c1fd20c50ebcbe29ef7ceafa654",
+          "neatlogs_timing": {
+            "seconds": 12.092,
+            "started_at": "2026-10-14T08:08:22.845Z"
+          }
         }
       }
     },
@@ -945,7 +977,11 @@
           "precision": 0.5,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "3ec71c1bb125e31182038db9a00fed23"
+          "neatlogs_trace_id": "3ec71c1bb125e31182038db9a00fed23",
+          "neatlogs_timing": {
+            "seconds": 7.203,
+            "started_at": "2026-10-14T07:54:01.992Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -1033,7 +1069,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "973db74eaa72c6ce5b4efbf351210a42"
+          "neatlogs_trace_id": "973db74eaa72c6ce5b4efbf351210a42",
+          "neatlogs_timing": {
+            "seconds": 9.322,
+            "started_at": "2026-10-14T07:54:12.401Z"
+          }
         }
       },
       "repeat_2": {
@@ -1118,7 +1158,11 @@
           "precision": 0.5,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "40a3173de3d14d42e36e81b7d0e37fb0"
+          "neatlogs_trace_id": "40a3173de3d14d42e36e81b7d0e37fb0",
+          "neatlogs_timing": {
+            "seconds": 7.093,
+            "started_at": "2026-10-14T08:08:38.027Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -1203,7 +1247,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "6e7560fecd68dcce15ef0306ae2632f6"
+          "neatlogs_trace_id": "6e7560fecd68dcce15ef0306ae2632f6",
+          "neatlogs_timing": {
+            "seconds": 24.137,
+            "started_at": "2026-10-14T08:08:48.418Z"
+          }
         }
       }
     },
@@ -1328,7 +1376,11 @@
           "precision": 0.5555555555555556,
           "recall": 0.7142857142857143,
           "exact_match": false,
-          "neatlogs_trace_id": "cdf9a2b16ead6aef162f1eb3ef767d7e"
+          "neatlogs_trace_id": "cdf9a2b16ead6aef162f1eb3ef767d7e",
+          "neatlogs_timing": {
+            "seconds": 9.994,
+            "started_at": "2026-10-14T07:54:27.541Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -1438,7 +1490,11 @@
           "precision": 0.6666666666666666,
           "recall": 0.8571428571428571,
           "exact_match": false,
-          "neatlogs_trace_id": "35fa8f325b798cb8f297c87d42b81b7e"
+          "neatlogs_trace_id": "35fa8f325b798cb8f297c87d42b81b7e",
+          "neatlogs_timing": {
+            "seconds": 18.149,
+            "started_at": "2026-10-14T07:54:41.458Z"
+          }
         }
       },
       "repeat_2": {
@@ -1548,7 +1604,11 @@
           "precision": 0.5555555555555556,
           "recall": 0.7142857142857143,
           "exact_match": false,
-          "neatlogs_trace_id": "2af200eddc85d12b34635481b44d14a7"
+          "neatlogs_trace_id": "2af200eddc85d12b34635481b44d14a7",
+          "neatlogs_timing": {
+            "seconds": 8.294,
+            "started_at": "2026-10-14T08:09:20.495Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -1658,7 +1718,11 @@
           "precision": 0.6666666666666666,
           "recall": 0.8571428571428571,
           "exact_match": false,
-          "neatlogs_trace_id": "743dd432b2d97106ae96c171af4d9cf4"
+          "neatlogs_trace_id": "743dd432b2d97106ae96c171af4d9cf4",
+          "neatlogs_timing": {
+            "seconds": 16.305,
+            "started_at": "2026-10-14T08:09:32.404Z"
+          }
         }
       }
     },
@@ -1776,7 +1840,11 @@
           "precision": 0.75,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "4c1c692af8626a7f9c17095adb97fbf4"
+          "neatlogs_trace_id": "4c1c692af8626a7f9c17095adb97fbf4",
+          "neatlogs_timing": {
+            "seconds": 8.373,
+            "started_at": "2026-10-14T07:55:03.160Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -1882,7 +1950,11 @@
           "precision": 0.75,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "771ffea393a1d5a7d6856b15f5703c0b"
+          "neatlogs_trace_id": "771ffea393a1d5a7d6856b15f5703c0b",
+          "neatlogs_timing": {
+            "seconds": 13.421,
+            "started_at": "2026-10-14T07:55:13.520Z"
+          }
         }
       },
       "repeat_2": {
@@ -1978,7 +2050,11 @@
           "precision": 0.75,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "85b9394e0a68f9df78215ff30b629b39"
+          "neatlogs_trace_id": "85b9394e0a68f9df78215ff30b629b39",
+          "neatlogs_timing": {
+            "seconds": 7.855,
+            "started_at": "2026-10-14T08:09:50.880Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -2079,7 +2155,11 @@
           "precision": 0.75,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "722936df9e8bbbc42ed68e0b6cd16270"
+          "neatlogs_trace_id": "722936df9e8bbbc42ed68e0b6cd16270",
+          "neatlogs_timing": {
+            "seconds": 13.519,
+            "started_at": "2026-10-14T08:10:01.017Z"
+          }
         }
       }
     },
@@ -2199,7 +2279,11 @@
           "precision": 0.75,
           "recall": 0.75,
           "exact_match": false,
-          "neatlogs_trace_id": "93d01df8ae381fd69e74cd40e070ac74"
+          "neatlogs_trace_id": "93d01df8ae381fd69e74cd40e070ac74",
+          "neatlogs_timing": {
+            "seconds": 6.841,
+            "started_at": "2026-10-14T07:55:30.846Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -2293,7 +2377,11 @@
           "precision": 0.6,
           "recall": 0.75,
           "exact_match": false,
-          "neatlogs_trace_id": "0f888d5d429d34951ace83ac6505f61d"
+          "neatlogs_trace_id": "0f888d5d429d34951ace83ac6505f61d",
+          "neatlogs_timing": {
+            "seconds": 12.55,
+            "started_at": "2026-10-14T07:55:39.397Z"
+          }
         }
       },
       "repeat_2": {
@@ -2394,7 +2482,11 @@
           "precision": 0.75,
           "recall": 0.75,
           "exact_match": false,
-          "neatlogs_trace_id": "8899d8049e8e1bae5447eccaa5222d16"
+          "neatlogs_trace_id": "8899d8049e8e1bae5447eccaa5222d16",
+          "neatlogs_timing": {
+            "seconds": 8.064,
+            "started_at": "2026-10-14T08:10:17.608Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -2489,7 +2581,11 @@
           "precision": 0.6,
           "recall": 0.75,
           "exact_match": false,
-          "neatlogs_trace_id": "cb702132d47de2f147b5ab35706ffce1"
+          "neatlogs_trace_id": "cb702132d47de2f147b5ab35706ffce1",
+          "neatlogs_timing": {
+            "seconds": 17.526,
+            "started_at": "2026-10-14T08:10:28.842Z"
+          }
         }
       }
     },
@@ -2586,7 +2682,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "f1fe80df808a0a924dd10ca4b2bad2b9"
+          "neatlogs_trace_id": "f1fe80df808a0a924dd10ca4b2bad2b9",
+          "neatlogs_timing": {
+            "seconds": 8.625,
+            "started_at": "2026-10-14T07:55:55.848Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -2673,7 +2773,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "f31e1dd7746cb705285bc06c38cd0a6e"
+          "neatlogs_trace_id": "f31e1dd7746cb705285bc06c38cd0a6e",
+          "neatlogs_timing": {
+            "seconds": 11.334,
+            "started_at": "2026-10-14T07:56:06.864Z"
+          }
         }
       },
       "repeat_2": {
@@ -2759,7 +2863,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "331736949ab6a351a23ed5a6d7de2087"
+          "neatlogs_trace_id": "331736949ab6a351a23ed5a6d7de2087",
+          "neatlogs_timing": {
+            "seconds": 7.892,
+            "started_at": "2026-10-14T08:10:49.275Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -2850,7 +2958,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "5abb8e30cdf8fdd6c17b0fc6fddca5c7"
+          "neatlogs_trace_id": "5abb8e30cdf8fdd6c17b0fc6fddca5c7",
+          "neatlogs_timing": {
+            "seconds": null,
+            "error": "NeatLogs trace read returned HTTP 404"
+          }
         }
       }
     },
@@ -2949,7 +3061,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "bab07c932b028bd603732893ce628512"
+          "neatlogs_trace_id": "bab07c932b028bd603732893ce628512",
+          "neatlogs_timing": {
+            "seconds": 7.984,
+            "started_at": "2026-10-14T07:56:21.858Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -3036,7 +3152,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "746471ad91316450eafe42b977b4ffbe"
+          "neatlogs_trace_id": "746471ad91316450eafe42b977b4ffbe",
+          "neatlogs_timing": {
+            "seconds": 10.225,
+            "started_at": "2026-10-14T07:56:34.198Z"
+          }
         }
       },
       "repeat_2": {
@@ -3122,7 +3242,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "b3c4840851a6a42c1947e7c479c12e98"
+          "neatlogs_trace_id": "b3c4840851a6a42c1947e7c479c12e98",
+          "neatlogs_timing": {
+            "seconds": 6.984,
+            "started_at": "2026-10-14T08:11:11.334Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -3209,7 +3333,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "f82e5e17a6695b540ddda229436f6925"
+          "neatlogs_trace_id": "f82e5e17a6695b540ddda229436f6925",
+          "neatlogs_timing": {
+            "seconds": null,
+            "error": "NeatLogs trace read returned HTTP 404"
+          }
         }
       }
     },
@@ -3304,7 +3432,11 @@
           "precision": 0.3333333333333333,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "8b24400d3cd7ee4f6448f869561dd979"
+          "neatlogs_trace_id": "8b24400d3cd7ee4f6448f869561dd979",
+          "neatlogs_timing": {
+            "seconds": 7.054,
+            "started_at": "2026-10-14T07:56:47.373Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -3384,7 +3516,11 @@
           "precision": 0.3333333333333333,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "6d5e2b9430dcd7bbcc9af530c3b022aa"
+          "neatlogs_trace_id": "6d5e2b9430dcd7bbcc9af530c3b022aa",
+          "neatlogs_timing": {
+            "seconds": 11.158,
+            "started_at": "2026-10-14T07:56:56.492Z"
+          }
         }
       },
       "repeat_2": {
@@ -3466,7 +3602,11 @@
           "precision": 0.3333333333333333,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "39168f3e16ca01ce4fcb1061eeee8048"
+          "neatlogs_trace_id": "39168f3e16ca01ce4fcb1061eeee8048",
+          "neatlogs_timing": {
+            "seconds": 7.451,
+            "started_at": "2026-10-14T08:11:35.158Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -3546,7 +3686,11 @@
           "precision": 0.3333333333333333,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "480f3a130f1be4bd80a245ae21b1bc08"
+          "neatlogs_trace_id": "480f3a130f1be4bd80a245ae21b1bc08",
+          "neatlogs_timing": {
+            "seconds": 10.966,
+            "started_at": "2026-10-14T08:11:44.410Z"
+          }
         }
       }
     },
@@ -3647,7 +3791,11 @@
           "precision": 0.25,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "8a8e74c1a8c19dd8b04d137599282c21"
+          "neatlogs_trace_id": "8a8e74c1a8c19dd8b04d137599282c21",
+          "neatlogs_timing": {
+            "seconds": 8.072,
+            "started_at": "2026-10-14T07:57:10.693Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -3742,7 +3890,11 @@
           "precision": 0.2,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "79f541bda99810091a388d5453d2a968"
+          "neatlogs_trace_id": "79f541bda99810091a388d5453d2a968",
+          "neatlogs_timing": {
+            "seconds": 13.326,
+            "started_at": "2026-10-14T07:57:21.886Z"
+          }
         }
       },
       "repeat_2": {
@@ -3831,7 +3983,11 @@
           "precision": 0.25,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "cd1f3ca5daad264f73f0cb8c0a6f80bc"
+          "neatlogs_trace_id": "cd1f3ca5daad264f73f0cb8c0a6f80bc",
+          "neatlogs_timing": {
+            "seconds": 7.886,
+            "started_at": "2026-10-14T08:11:59.307Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -3926,7 +4082,11 @@
           "precision": 0.2,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "138b04580edbfe9ce53421b0bdf9bebc"
+          "neatlogs_trace_id": "138b04580edbfe9ce53421b0bdf9bebc",
+          "neatlogs_timing": {
+            "seconds": 11.835,
+            "started_at": "2026-10-14T08:12:10.154Z"
+          }
         }
       }
     },
@@ -4030,7 +4190,11 @@
           "precision": 0.25,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "b95f5105f08a4d47f8595b37a875041b"
+          "neatlogs_trace_id": "b95f5105f08a4d47f8595b37a875041b",
+          "neatlogs_timing": {
+            "seconds": 7.709,
+            "started_at": "2026-10-14T07:57:38.899Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -4125,7 +4289,11 @@
           "precision": 0.0,
           "recall": 0.0,
           "exact_match": false,
-          "neatlogs_trace_id": "6925d57ba361c5c0f6a5d835d88745e7"
+          "neatlogs_trace_id": "6925d57ba361c5c0f6a5d835d88745e7",
+          "neatlogs_timing": {
+            "seconds": 13.357,
+            "started_at": "2026-10-14T07:57:48.652Z"
+          }
         }
       },
       "repeat_2": {
@@ -4219,7 +4387,11 @@
           "precision": 0.2,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "05827964cb0ee3991434d0af348d5070"
+          "neatlogs_trace_id": "05827964cb0ee3991434d0af348d5070",
+          "neatlogs_timing": {
+            "seconds": 7.385,
+            "started_at": "2026-10-14T08:12:24.206Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -4313,7 +4485,11 @@
           "precision": 0.2,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "3a413587a188191661a25381cb118350"
+          "neatlogs_trace_id": "3a413587a188191661a25381cb118350",
+          "neatlogs_timing": {
+            "seconds": 16.655,
+            "started_at": "2026-10-14T08:12:34.461Z"
+          }
         }
       }
     },
@@ -4415,7 +4591,11 @@
           "precision": 0.3333333333333333,
           "recall": 0.5,
           "exact_match": false,
-          "neatlogs_trace_id": "6235a609656514eaa5a5b71a2f338ca1"
+          "neatlogs_trace_id": "6235a609656514eaa5a5b71a2f338ca1",
+          "neatlogs_timing": {
+            "seconds": 6.958,
+            "started_at": "2026-10-14T07:58:04.493Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -4506,7 +4686,11 @@
           "precision": 0.25,
           "recall": 0.5,
           "exact_match": false,
-          "neatlogs_trace_id": "02b8e475a819bc8879f91d0390e30820"
+          "neatlogs_trace_id": "02b8e475a819bc8879f91d0390e30820",
+          "neatlogs_timing": {
+            "seconds": 18.385,
+            "started_at": "2026-10-14T07:58:13.698Z"
+          }
         }
       },
       "repeat_2": {
@@ -4595,7 +4779,11 @@
           "precision": 0.3333333333333333,
           "recall": 0.5,
           "exact_match": false,
-          "neatlogs_trace_id": "7ba9fbb52313fced7d053e552b13145c"
+          "neatlogs_trace_id": "7ba9fbb52313fced7d053e552b13145c",
+          "neatlogs_timing": {
+            "seconds": 6.814,
+            "started_at": "2026-10-14T08:12:53.202Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -4683,7 +4871,11 @@
           "precision": 0.25,
           "recall": 0.5,
           "exact_match": false,
-          "neatlogs_trace_id": "ac2284636a2622b23d3c24c8038e4dd7"
+          "neatlogs_trace_id": "ac2284636a2622b23d3c24c8038e4dd7",
+          "neatlogs_timing": {
+            "seconds": 14.809,
+            "started_at": "2026-10-14T08:13:02.260Z"
+          }
         }
       }
     },
@@ -4798,7 +4990,11 @@
           "precision": 0.6666666666666666,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "e0cd22a2047e4e716f09465090ea2ca2"
+          "neatlogs_trace_id": "e0cd22a2047e4e716f09465090ea2ca2",
+          "neatlogs_timing": {
+            "seconds": 10.829,
+            "started_at": "2026-10-14T07:58:35.308Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -4905,7 +5101,11 @@
           "precision": 0.5,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "3ce0a8a15bc8c8458db5a59e887e970e"
+          "neatlogs_trace_id": "3ce0a8a15bc8c8458db5a59e887e970e",
+          "neatlogs_timing": {
+            "seconds": 13.998,
+            "started_at": "2026-10-14T07:58:48.361Z"
+          }
         }
       },
       "repeat_2": {
@@ -5003,7 +5203,11 @@
           "precision": 0.6666666666666666,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "e3071662d0b54fa20f1813cfddd7600e"
+          "neatlogs_trace_id": "e3071662d0b54fa20f1813cfddd7600e",
+          "neatlogs_timing": {
+            "seconds": null,
+            "error": "NeatLogs trace read returned HTTP 404"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -5106,7 +5310,11 @@
           "precision": 0.5,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "a558621877b9657245938d569c22bd12"
+          "neatlogs_trace_id": "a558621877b9657245938d569c22bd12",
+          "neatlogs_timing": {
+            "seconds": 17.177,
+            "started_at": "2026-10-14T08:13:29.036Z"
+          }
         }
       }
     },
@@ -5217,7 +5425,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "254cd2b8ca29d29dfd38d54271c92710"
+          "neatlogs_trace_id": "254cd2b8ca29d29dfd38d54271c92710",
+          "neatlogs_timing": {
+            "seconds": 7.499,
+            "started_at": "2026-10-14T07:59:04.735Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -5314,7 +5526,11 @@
           "precision": 0.8,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "ebdfe671f9a426776c9d9b7ec3581717"
+          "neatlogs_trace_id": "ebdfe671f9a426776c9d9b7ec3581717",
+          "neatlogs_timing": {
+            "seconds": 16.463,
+            "started_at": "2026-10-14T07:59:14.570Z"
+          }
         }
       },
       "repeat_2": {
@@ -5407,7 +5623,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "2fa522afe960a7c85532ad1f1efe69b9"
+          "neatlogs_trace_id": "2fa522afe960a7c85532ad1f1efe69b9",
+          "neatlogs_timing": {
+            "seconds": 7.304,
+            "started_at": "2026-10-14T08:13:49.405Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -5508,7 +5728,11 @@
           "precision": 0.8,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "21cfe92c25244fd978114bb0300e10c8"
+          "neatlogs_trace_id": "21cfe92c25244fd978114bb0300e10c8",
+          "neatlogs_timing": {
+            "seconds": 20.446,
+            "started_at": "2026-10-14T08:13:59.609Z"
+          }
         }
       }
     },
@@ -5614,7 +5838,11 @@
           "precision": 0.0,
           "recall": 0.0,
           "exact_match": false,
-          "neatlogs_trace_id": "6d73990c6d57b7b7d9a16d92717ccce4"
+          "neatlogs_trace_id": "6d73990c6d57b7b7d9a16d92717ccce4",
+          "neatlogs_timing": {
+            "seconds": 7.937,
+            "started_at": "2026-10-14T07:59:38.792Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -5713,7 +5941,11 @@
           "precision": 0.0,
           "recall": 0.0,
           "exact_match": false,
-          "neatlogs_trace_id": "bdb02ef0e05747186aca32584cc572af"
+          "neatlogs_trace_id": "bdb02ef0e05747186aca32584cc572af",
+          "neatlogs_timing": {
+            "seconds": null,
+            "error": "NeatLogs trace read returned HTTP 404"
+          }
         }
       },
       "repeat_2": {
@@ -5805,7 +6037,11 @@
           "precision": 0.0,
           "recall": 0.0,
           "exact_match": false,
-          "neatlogs_trace_id": "37c92edee0e4bf059719b5cfb3ed4e65"
+          "neatlogs_trace_id": "37c92edee0e4bf059719b5cfb3ed4e65",
+          "neatlogs_timing": {
+            "seconds": 7.873,
+            "started_at": "2026-10-14T08:14:25.077Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -5909,7 +6145,11 @@
           "precision": 0.0,
           "recall": 0.0,
           "exact_match": false,
-          "neatlogs_trace_id": "bc4e73e3a07897720eedbb1fff253c8b"
+          "neatlogs_trace_id": "bc4e73e3a07897720eedbb1fff253c8b",
+          "neatlogs_timing": {
+            "seconds": 12.354,
+            "started_at": "2026-10-14T08:14:38.762Z"
+          }
         }
       }
     },
@@ -6008,7 +6248,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "25f70e53997d2af6b15d016d603d8b6b"
+          "neatlogs_trace_id": "25f70e53997d2af6b15d016d603d8b6b",
+          "neatlogs_timing": {
+            "seconds": null,
+            "error": "NeatLogs trace read returned HTTP 404"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -6094,7 +6338,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "a1ad8b44a771e415482063e4d2c42b66"
+          "neatlogs_trace_id": "a1ad8b44a771e415482063e4d2c42b66",
+          "neatlogs_timing": {
+            "seconds": 10.101,
+            "started_at": "2026-10-14T08:00:15.292Z"
+          }
         }
       },
       "repeat_2": {
@@ -6179,7 +6427,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "874939d085bbd3ea59098a772dbbf6e6"
+          "neatlogs_trace_id": "874939d085bbd3ea59098a772dbbf6e6",
+          "neatlogs_timing": {
+            "seconds": 7.071,
+            "started_at": "2026-10-14T08:14:54.136Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -6269,7 +6521,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "93b075754f50030d1a65ba11c9922c41"
+          "neatlogs_trace_id": "93b075754f50030d1a65ba11c9922c41",
+          "neatlogs_timing": {
+            "seconds": 9.936,
+            "started_at": "2026-10-14T08:15:03.489Z"
+          }
         }
       }
     },
@@ -6371,7 +6627,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "1ee4fb558ddce9b81edf3ec545972ca7"
+          "neatlogs_trace_id": "1ee4fb558ddce9b81edf3ec545972ca7",
+          "neatlogs_timing": {
+            "seconds": null,
+            "error": "NeatLogs trace read returned HTTP 404"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -6455,7 +6715,11 @@
           "precision": 1.0,
           "recall": 0.5,
           "exact_match": false,
-          "neatlogs_trace_id": "06df5918c035dd24abfb079a8726dc21"
+          "neatlogs_trace_id": "06df5918c035dd24abfb079a8726dc21",
+          "neatlogs_timing": {
+            "seconds": null,
+            "error": "NeatLogs trace read returned HTTP 404"
+          }
         }
       },
       "repeat_2": {
@@ -6542,7 +6806,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "3f5fa2f5ed1e8afc1b3e0e02435a77ad"
+          "neatlogs_trace_id": "3f5fa2f5ed1e8afc1b3e0e02435a77ad",
+          "neatlogs_timing": {
+            "seconds": 7.543,
+            "started_at": "2026-10-14T08:15:16.646Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -6631,7 +6899,11 @@
           "precision": 1.0,
           "recall": 0.5,
           "exact_match": false,
-          "neatlogs_trace_id": "23f26332a8fe91c53334ef29a9f65bdf"
+          "neatlogs_trace_id": "23f26332a8fe91c53334ef29a9f65bdf",
+          "neatlogs_timing": {
+            "seconds": 13.61,
+            "started_at": "2026-10-14T08:15:27.352Z"
+          }
         }
       }
     },
@@ -6743,7 +7015,11 @@
           "precision": 0.3333333333333333,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "f08c46221605231a8f40576c939138a6"
+          "neatlogs_trace_id": "f08c46221605231a8f40576c939138a6",
+          "neatlogs_timing": {
+            "seconds": 9.619,
+            "started_at": "2026-10-14T08:00:54.582Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -6830,7 +7106,11 @@
           "precision": 0,
           "recall": 0.0,
           "exact_match": false,
-          "neatlogs_trace_id": "b9659df41f422788f35cca9dc1a08a9c"
+          "neatlogs_trace_id": "b9659df41f422788f35cca9dc1a08a9c",
+          "neatlogs_timing": {
+            "seconds": 12.023,
+            "started_at": "2026-10-14T08:01:07.224Z"
+          }
         }
       },
       "repeat_2": {
@@ -6922,7 +7202,11 @@
           "precision": 0.5,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "84bb25846c9a0602168c4e4023c0026e"
+          "neatlogs_trace_id": "84bb25846c9a0602168c4e4023c0026e",
+          "neatlogs_timing": {
+            "seconds": 8.126,
+            "started_at": "2026-10-14T08:15:42.910Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -7013,7 +7297,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "3b331158e8b59a9ab2a396f1092673cb"
+          "neatlogs_trace_id": "3b331158e8b59a9ab2a396f1092673cb",
+          "neatlogs_timing": {
+            "seconds": 10.319,
+            "started_at": "2026-10-14T08:15:55.306Z"
+          }
         }
       }
     },
@@ -7129,7 +7417,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "7866f64a9ac91a77617a28f90d468ef7"
+          "neatlogs_trace_id": "7866f64a9ac91a77617a28f90d468ef7",
+          "neatlogs_timing": {
+            "seconds": 7.834,
+            "started_at": "2026-10-14T08:01:22.960Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -7241,7 +7533,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "3330fb6c8bab0ad703300c8b636765a2"
+          "neatlogs_trace_id": "3330fb6c8bab0ad703300c8b636765a2",
+          "neatlogs_timing": {
+            "seconds": 11.989,
+            "started_at": "2026-10-14T08:01:33.444Z"
+          }
         }
       },
       "repeat_2": {
@@ -7339,7 +7635,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "9df8fd726c86a8d263f5937a2bf089eb"
+          "neatlogs_trace_id": "9df8fd726c86a8d263f5937a2bf089eb",
+          "neatlogs_timing": {
+            "seconds": 6.935,
+            "started_at": "2026-10-14T08:16:08.542Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -7446,7 +7746,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "2a8da43cf98182b5647cc2e78bb3f621"
+          "neatlogs_trace_id": "2a8da43cf98182b5647cc2e78bb3f621",
+          "neatlogs_timing": {
+            "seconds": null,
+            "error": "NeatLogs trace read returned HTTP 404"
+          }
         }
       }
     },
@@ -7566,7 +7870,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "a09aa635b5070e7e773754cb8440a5a0"
+          "neatlogs_trace_id": "a09aa635b5070e7e773754cb8440a5a0",
+          "neatlogs_timing": {
+            "seconds": 7.844,
+            "started_at": "2026-10-14T08:01:48.330Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -7655,7 +7963,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "ac508a6d22b364847e76d54100f903ad"
+          "neatlogs_trace_id": "ac508a6d22b364847e76d54100f903ad",
+          "neatlogs_timing": {
+            "seconds": 10.469,
+            "started_at": "2026-10-14T08:01:58.359Z"
+          }
         }
       },
       "repeat_2": {
@@ -7761,7 +8073,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "bd12680fa965da4bd0db52efb100353e"
+          "neatlogs_trace_id": "bd12680fa965da4bd0db52efb100353e",
+          "neatlogs_timing": {
+            "seconds": null,
+            "error": "NeatLogs trace read returned HTTP 404"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -7854,7 +8170,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "bff081f99ffcdbb90663b728a94a6c1d"
+          "neatlogs_trace_id": "bff081f99ffcdbb90663b728a94a6c1d",
+          "neatlogs_timing": {
+            "seconds": 9.137,
+            "started_at": "2026-10-14T08:16:39.046Z"
+          }
         }
       }
     },
@@ -7963,7 +8283,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "82cb4954500371099dc417d4f9dde7b8"
+          "neatlogs_trace_id": "82cb4954500371099dc417d4f9dde7b8",
+          "neatlogs_timing": {
+            "seconds": 7.849,
+            "started_at": "2026-10-14T08:02:12.540Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -8056,7 +8380,11 @@
           "precision": 0.6666666666666666,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "c3a838e6e10ab3506845318ce146ee83"
+          "neatlogs_trace_id": "c3a838e6e10ab3506845318ce146ee83",
+          "neatlogs_timing": {
+            "seconds": 11.772,
+            "started_at": "2026-10-14T08:02:23.338Z"
+          }
         }
       },
       "repeat_2": {
@@ -8150,7 +8478,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "5a0dc1f569d5499c642d535c11bee84f"
+          "neatlogs_trace_id": "5a0dc1f569d5499c642d535c11bee84f",
+          "neatlogs_timing": {
+            "seconds": 7.427,
+            "started_at": "2026-10-14T08:16:51.600Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -8243,7 +8575,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "c453f9ee46d697b247e608d4550d247c"
+          "neatlogs_trace_id": "c453f9ee46d697b247e608d4550d247c",
+          "neatlogs_timing": {
+            "seconds": 14.077,
+            "started_at": "2026-10-14T08:17:01.944Z"
+          }
         }
       }
     },
@@ -8359,7 +8695,11 @@
           "precision": 0.5,
           "recall": 0.3333333333333333,
           "exact_match": false,
-          "neatlogs_trace_id": "22298373aafbc2604f2936d6a5ad9d78"
+          "neatlogs_trace_id": "22298373aafbc2604f2936d6a5ad9d78",
+          "neatlogs_timing": {
+            "seconds": 7.989,
+            "started_at": "2026-10-14T08:02:37.694Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -8467,7 +8807,11 @@
           "precision": 0.5,
           "recall": 0.3333333333333333,
           "exact_match": false,
-          "neatlogs_trace_id": "23a5917eae8cdda5fa4fe6e80463ce0d"
+          "neatlogs_trace_id": "23a5917eae8cdda5fa4fe6e80463ce0d",
+          "neatlogs_timing": {
+            "seconds": 11.947,
+            "started_at": "2026-10-14T08:02:47.638Z"
+          }
         }
       },
       "repeat_2": {
@@ -8574,7 +8918,11 @@
           "precision": 0.5,
           "recall": 0.3333333333333333,
           "exact_match": false,
-          "neatlogs_trace_id": "688451dec8e0c0d4e7060ab6498dfb89"
+          "neatlogs_trace_id": "688451dec8e0c0d4e7060ab6498dfb89",
+          "neatlogs_timing": {
+            "seconds": null,
+            "error": "NeatLogs trace read returned HTTP 404"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -8668,7 +9016,11 @@
           "precision": 0.5,
           "recall": 0.3333333333333333,
           "exact_match": false,
-          "neatlogs_trace_id": "5663cab038dc37f842fa3993e20f0ca5"
+          "neatlogs_trace_id": "5663cab038dc37f842fa3993e20f0ca5",
+          "neatlogs_timing": {
+            "seconds": 12.839,
+            "started_at": "2026-10-14T08:17:35.555Z"
+          }
         }
       }
     },
@@ -8770,7 +9122,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "156f4272e5be872272683f4be95a6932"
+          "neatlogs_trace_id": "156f4272e5be872272683f4be95a6932",
+          "neatlogs_timing": {
+            "seconds": 7.616,
+            "started_at": "2026-10-14T08:03:02.867Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -8863,7 +9219,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "e98bdeb55cddd6561f85c43e83fb8068"
+          "neatlogs_trace_id": "e98bdeb55cddd6561f85c43e83fb8068",
+          "neatlogs_timing": {
+            "seconds": 11.369,
+            "started_at": "2026-10-14T08:03:13.308Z"
+          }
         }
       },
       "repeat_2": {
@@ -8962,7 +9322,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "c0d53ecf4961f4cc2a124c49f25d6799"
+          "neatlogs_trace_id": "c0d53ecf4961f4cc2a124c49f25d6799",
+          "neatlogs_timing": {
+            "seconds": 6.805,
+            "started_at": "2026-10-14T08:17:51.644Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -9051,7 +9415,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "789d53d4f92df542e6cc75bbffde5378"
+          "neatlogs_trace_id": "789d53d4f92df542e6cc75bbffde5378",
+          "neatlogs_timing": {
+            "seconds": 11.255,
+            "started_at": "2026-10-14T08:18:00.433Z"
+          }
         }
       }
     },
@@ -9162,7 +9530,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "27d9544af81086c6a00975005860284f"
+          "neatlogs_trace_id": "27d9544af81086c6a00975005860284f",
+          "neatlogs_timing": {
+            "seconds": 7.494,
+            "started_at": "2026-10-14T08:03:27.688Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -9256,7 +9628,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "560efb5c6799f4ec537dc95dcf005c05"
+          "neatlogs_trace_id": "560efb5c6799f4ec537dc95dcf005c05",
+          "neatlogs_timing": {
+            "seconds": 13.057,
+            "started_at": "2026-10-14T08:03:39.425Z"
+          }
         }
       },
       "repeat_2": {
@@ -9352,7 +9728,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "8293439f74c567298076f70968401ec8"
+          "neatlogs_trace_id": "8293439f74c567298076f70968401ec8",
+          "neatlogs_timing": {
+            "seconds": 7.601,
+            "started_at": "2026-10-14T08:18:15.947Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -9446,7 +9826,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "69bc4cf7b03b1d0c2e6c62d8907a2273"
+          "neatlogs_trace_id": "69bc4cf7b03b1d0c2e6c62d8907a2273",
+          "neatlogs_timing": {
+            "seconds": null,
+            "error": "NeatLogs trace read returned HTTP 404"
+          }
         }
       }
     },
@@ -9553,7 +9937,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "48280acb46cb73e76171f78383957822"
+          "neatlogs_trace_id": "48280acb46cb73e76171f78383957822",
+          "neatlogs_timing": {
+            "seconds": 10.766,
+            "started_at": "2026-10-14T08:03:55.549Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -9663,7 +10051,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "2340a336ffc628d886ffa9879d2f7be4"
+          "neatlogs_trace_id": "2340a336ffc628d886ffa9879d2f7be4",
+          "neatlogs_timing": {
+            "seconds": 12.846,
+            "started_at": "2026-10-14T08:04:11.317Z"
+          }
         }
       },
       "repeat_2": {
@@ -9759,7 +10151,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "d77ec65127f0c85ae772153dad3c7621"
+          "neatlogs_trace_id": "d77ec65127f0c85ae772153dad3c7621",
+          "neatlogs_timing": {
+            "seconds": 6.847,
+            "started_at": "2026-10-14T08:18:42.183Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -9870,7 +10266,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "c228fa95a1c75deb3bf87bf5efbadc4b"
+          "neatlogs_trace_id": "c228fa95a1c75deb3bf87bf5efbadc4b",
+          "neatlogs_timing": {
+            "seconds": 10.326,
+            "started_at": "2026-10-14T08:18:51.921Z"
+          }
         }
       }
     },
@@ -10000,7 +10400,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "b62097ccc3020f431d779b09d08c6fdc"
+          "neatlogs_trace_id": "b62097ccc3020f431d779b09d08c6fdc",
+          "neatlogs_timing": {
+            "seconds": 8.445,
+            "started_at": "2026-10-14T08:04:26.531Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -10099,7 +10503,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "29aa0dee8662f52523342f414c7b72a6"
+          "neatlogs_trace_id": "29aa0dee8662f52523342f414c7b72a6",
+          "neatlogs_timing": {
+            "seconds": 11.085,
+            "started_at": "2026-10-14T08:04:40.965Z"
+          }
         }
       },
       "repeat_2": {
@@ -10218,7 +10626,11 @@
           "precision": 0.5,
           "recall": 0.5,
           "exact_match": false,
-          "neatlogs_trace_id": "a1fba0f4db92856e3e26fe00bc7fb9f6"
+          "neatlogs_trace_id": "a1fba0f4db92856e3e26fe00bc7fb9f6",
+          "neatlogs_timing": {
+            "seconds": 7.187,
+            "started_at": "2026-10-14T08:19:05.432Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -10332,7 +10744,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "9e2bb5bf324df02a6ebbb2ec3298ad0d"
+          "neatlogs_trace_id": "9e2bb5bf324df02a6ebbb2ec3298ad0d",
+          "neatlogs_timing": {
+            "seconds": 12.506,
+            "started_at": "2026-10-14T08:19:14.669Z"
+          }
         }
       }
     },
@@ -10447,7 +10863,11 @@
           "precision": 0.75,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "fd368670da97fdabcfd39f56ba9a9d22"
+          "neatlogs_trace_id": "fd368670da97fdabcfd39f56ba9a9d22",
+          "neatlogs_timing": {
+            "seconds": 7.121,
+            "started_at": "2026-10-14T08:04:54.850Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -10564,7 +10984,11 @@
           "precision": 0.6,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "10c80ce1034009b969fa0e39d674d23e"
+          "neatlogs_trace_id": "10c80ce1034009b969fa0e39d674d23e",
+          "neatlogs_timing": {
+            "seconds": 13.532,
+            "started_at": "2026-10-14T08:05:05.347Z"
+          }
         }
       },
       "repeat_2": {
@@ -10665,7 +11089,11 @@
           "precision": 0.75,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "2bdf16bddda890a36cb31a9bdf6f43b5"
+          "neatlogs_trace_id": "2bdf16bddda890a36cb31a9bdf6f43b5",
+          "neatlogs_timing": {
+            "seconds": 8.058,
+            "started_at": "2026-10-14T08:19:29.467Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -10778,7 +11206,11 @@
           "precision": 0.75,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "b084f4067fb1bf42f8bece090b05f4bc"
+          "neatlogs_trace_id": "b084f4067fb1bf42f8bece090b05f4bc",
+          "neatlogs_timing": {
+            "seconds": 13.677,
+            "started_at": "2026-10-14T08:19:39.679Z"
+          }
         }
       }
     },
@@ -10896,7 +11328,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "18e58f406110b61699057e1b281c64b7"
+          "neatlogs_trace_id": "18e58f406110b61699057e1b281c64b7",
+          "neatlogs_timing": {
+            "seconds": 7.857,
+            "started_at": "2026-10-14T08:05:22.055Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -11018,7 +11454,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "c015a957fb4712dbfc0e84a2b68cb6a2"
+          "neatlogs_trace_id": "c015a957fb4712dbfc0e84a2b68cb6a2",
+          "neatlogs_timing": {
+            "seconds": 13.418,
+            "started_at": "2026-10-14T08:05:33.405Z"
+          }
         }
       },
       "repeat_2": {
@@ -11125,7 +11565,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "9e0a520c65c84de341cba094baaed030"
+          "neatlogs_trace_id": "9e0a520c65c84de341cba094baaed030",
+          "neatlogs_timing": {
+            "seconds": null,
+            "error": "NeatLogs trace read returned HTTP 404"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -11232,7 +11676,11 @@
           "precision": 0.6666666666666666,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "4b1c84aa2b38b0ee74a5e62f558915b0"
+          "neatlogs_trace_id": "4b1c84aa2b38b0ee74a5e62f558915b0",
+          "neatlogs_timing": {
+            "seconds": 10.382,
+            "started_at": "2026-10-14T08:20:07.125Z"
+          }
         }
       }
     },
@@ -11349,7 +11797,11 @@
           "precision": 0.5,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "2990f463a04d53b946cfb6b067879bee"
+          "neatlogs_trace_id": "2990f463a04d53b946cfb6b067879bee",
+          "neatlogs_timing": {
+            "seconds": 7.325,
+            "started_at": "2026-10-14T08:05:49.459Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -11463,7 +11915,11 @@
           "precision": 0.2,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "417331c277e176cc41f06fa61e4b48f0"
+          "neatlogs_trace_id": "417331c277e176cc41f06fa61e4b48f0",
+          "neatlogs_timing": {
+            "seconds": 22.058,
+            "started_at": "2026-10-14T08:06:00.064Z"
+          }
         }
       },
       "repeat_2": {
@@ -11588,7 +12044,11 @@
           "precision": 0.5,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "35dc0eddc60c4324f47e336534438485"
+          "neatlogs_trace_id": "35dc0eddc60c4324f47e336534438485",
+          "neatlogs_timing": {
+            "seconds": 7.128,
+            "started_at": "2026-10-14T08:20:21.739Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -11700,7 +12160,11 @@
           "precision": 0.3333333333333333,
           "recall": 1.0,
           "exact_match": false,
-          "neatlogs_trace_id": "09da897073d80fd5f2d8790d0cb4a3f0"
+          "neatlogs_trace_id": "09da897073d80fd5f2d8790d0cb4a3f0",
+          "neatlogs_timing": {
+            "seconds": 10.711,
+            "started_at": "2026-10-14T08:20:31.162Z"
+          }
         }
       }
     },
@@ -11809,7 +12273,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "57068a760edc430d62ccfd0611c6373a"
+          "neatlogs_trace_id": "57068a760edc430d62ccfd0611c6373a",
+          "neatlogs_timing": {
+            "seconds": 14.846,
+            "started_at": "2026-10-14T08:06:27.026Z"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -11898,7 +12366,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "66ba1c0b4791285afd37f9417f48f992"
+          "neatlogs_trace_id": "66ba1c0b4791285afd37f9417f48f992",
+          "neatlogs_timing": {
+            "seconds": 10.636,
+            "started_at": "2026-10-14T08:06:46.945Z"
+          }
         }
       },
       "repeat_2": {
@@ -11995,7 +12467,11 @@
           "precision": 1.0,
           "recall": 1.0,
           "exact_match": true,
-          "neatlogs_trace_id": "70ae3683bdf68c76c0b7a5ee2b1abe86"
+          "neatlogs_trace_id": "70ae3683bdf68c76c0b7a5ee2b1abe86",
+          "neatlogs_timing": {
+            "seconds": null,
+            "error": "NeatLogs trace read returned HTTP 404"
+          }
         },
         "openai": {
           "provider": "openai",
@@ -12084,7 +12560,11 @@
           "precision": 1.0,
           "recall": 0.6666666666666666,
           "exact_match": false,
-          "neatlogs_trace_id": "d6a803b232def7503bb99af3a4152afd"
+          "neatlogs_trace_id": "d6a803b232def7503bb99af3a4152afd",
+          "neatlogs_timing": {
+            "seconds": 13.919,
+            "started_at": "2026-10-14T08:20:57.745Z"
+          }
         }
       }
     }

@@ -6,6 +6,7 @@ Run: python scripts/benchmark_page.py
 import json
 import statistics
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,9 +89,25 @@ for label, key in (("recall", "mean_recall"), ("precision", "mean_precision")):
     lines.append(f"| Repeat 1 → 2 {label} | {cells[0]} | {cells[1]} |")
 cells = [" → ".join(str(r["exact_matches"]) for r in summary["providers"][p]["per_repeat"]) for p in PROVIDERS]
 lines.append(f"| Repeat 1 → 2 exact sets | {cells[0]} | {cells[1]} |")
+recorded = [(c, k, p) for c in data["cases"] for k in PASSES for p in PROVIDERS]
+timed = [(c[k][p]["neatlogs_timing"], p) for c, k, p in recorded if c[k][p]["neatlogs_timing"]["seconds"] is not None]
+secs = {p: [t["seconds"] for t, q in timed if q == p] for p in PROVIDERS}
+cells = [f"{statistics.median(secs[p]):.1f} s ({min(secs[p]):.1f}–{max(secs[p]):.1f} s, {len(secs[p])} / {len(recorded) // 2} traces)" for p in PROVIDERS]
+lines.append(f"| Time per prediction, median (min–max) | {cells[0]} | {cells[1]} |")
+starts = [datetime.fromisoformat(t["started_at"]) for t, _ in timed]
+ends = [datetime.fromisoformat(t["started_at"]) + timedelta(seconds=t["seconds"]) for t, _ in timed]
+first, last = recorded[0], recorded[-1]  # the runner went in this order, one prediction at a time
+assert all(c[k][p]["neatlogs_timing"]["seconds"] is not None for c, k, p in (first, last))
+wall = (max(ends) - min(starts)).total_seconds()
 lines += [
     "",
     "Means weight each scored prediction equally. Spend is a token × list-price estimate (see Setup), not a provider invoice.",
+    "",
+    f"**Time (benchmark):** per-prediction time is the NeatLogs trace latency of the prediction's workflow span "
+    f"(model calls plus Entire searches; issue-context collection ran before the span). "
+    f"{len(recorded) - len(timed)} of {len(recorded)} traces return HTTP 404 from the NeatLogs read API, so they have no time. "
+    f"Total wall time: {wall:.0f} s ({wall / 60:.1f} min) from the first prediction's start to the last one's end, "
+    f"{len(recorded)} predictions run one at a time. Stored per prediction as `neatlogs_timing` in the JSON.",
     "",
     "**Speed (live workflow):** GitHub Actions runs of *Prism automated estimation and allocation* on "
     "[Bhavya031/flask](https://github.com/Bhavya031/flask/actions) triggered by an opened issue took 167–187 s "
@@ -198,16 +215,18 @@ for c in data["cases"]:
         "<details>",
         f"<summary>{c['id']} — truth: {', '.join(c['actual_files'])}</summary>",
         "",
-        "| Model | Repeat | R/P | Predicted | NeatLogs trace | Entire queries (hits) |",
-        "|---|---:|---:|---|---|---|",
+        "| Model | Repeat | R/P | Time | Predicted | NeatLogs trace | Entire queries (hits) |",
+        "|---|---:|---:|---:|---|---|---|",
     ]
     for n, k in enumerate(PASSES, 1):
         for p in PROVIDERS:
             r = c[k][p]
             queries = "<br>".join(f"`{t.replace('|', '&#124;')}` ({h})" for t, h in r["discovery"]["hits_per_term"].items())
             predicted = "<br>".join(f"`{f}`" for f in r["predicted"]) or "(none)"
+            seconds = r["neatlogs_timing"]["seconds"]
+            time = "n/a" if seconds is None else f"{seconds:.1f} s"
             lines.append(
-                f"| {p} | {n} | {r['recall'] * 100:.0f}/{r['precision'] * 100:.0f} | {predicted} "
+                f"| {p} | {n} | {r['recall'] * 100:.0f}/{r['precision'] * 100:.0f} | {time} | {predicted} "
                 f"| `{r['neatlogs_trace_id']}` | {queries} |"
             )
     lines += ["", "</details>", ""]
