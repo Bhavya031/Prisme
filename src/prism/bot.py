@@ -29,7 +29,7 @@ def source_marker(event: dict, commit: str) -> str:
     return f"<!-- prism-source:sha256={digest};commit={commit} -->"
 
 
-def refusal(event: dict) -> str | None:
+def refusal(event: dict, *, allow_anyone: bool = False) -> str | None:
     """Why this webhook event must not start a run, or None when it may."""
     issue, comment = event.get("issue") or {}, event.get("comment")
     if "pull_request" in issue:
@@ -43,10 +43,12 @@ def refusal(event: dict) -> str | None:
             return f"not a new {COMMAND} comment"
         author = comment
     elif event.get("action") == "opened":
+        if (issue.get("user") or {}).get("type") == "Bot":
+            return "bot issues do not request estimates"
         author = issue
     else:
         return "not a newly opened issue"
-    if author.get("author_association") not in INSIDERS:
+    if not allow_anyone and author.get("author_association") not in INSIDERS:
         return "the author is not an owner, member or collaborator of the repository"
     return None
 
@@ -69,9 +71,9 @@ def retry_after(comments: list[dict], now: datetime, cooldown_minutes: int = DEF
 
 
 def gate(event: dict, fetch, now: datetime | None = None, *, commit: str | None = None,
-         cooldown_minutes: int = DEFAULT_COOLDOWN_MINUTES) -> str | None:
+         cooldown_minutes: int = DEFAULT_COOLDOWN_MINUTES, allow_anyone: bool = False) -> str | None:
     """Refuse unauthorized, duplicate, or repository-rate-limited issue requests before model calls."""
-    if reason := refusal(event):
+    if reason := refusal(event, allow_anyone=allow_anyone):
         raise PermissionError(reason)
     now = now or datetime.now(timezone.utc)
     if commit:
