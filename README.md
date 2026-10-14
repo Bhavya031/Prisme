@@ -8,6 +8,40 @@
 
 ![Prism: automated estimation and allocation](docs/assets/prism-poster.webp)
 
+## Try it yourself
+
+Judges: [open a Flask issue](https://github.com/Bhavya031/flask/issues/new) with any title and body below; Prism replies with predicted files, tokens, USD cost, then a CFO.ai allocation in about 3 minutes. After editing, comment `/prism estimate` to re-run.
+
+### Warn at startup when SECRET_KEY is missing and sessions are used
+
+```text
+When `SECRET_KEY` is not set, using `session` fails only when a request tries to write to it, with "The session is unavailable because no secret key was set". This is easy to miss in development until a specific page is hit.
+
+Flask could log a clear warning once at app startup (or on the first request) when sessions are used and `SECRET_KEY` is empty, pointing to the config docs.
+
+Expected: a one-time warning that names `SECRET_KEY` and links to the docs. No behaviour change otherwise.
+```
+
+### Add --json output to flask routes
+
+```text
+`flask routes` prints a table that is easy to read but hard to use from scripts.
+
+Please add a `--json` option that prints each rule as a JSON object with `endpoint`, `methods` and `rule`, keeping the current sorting options (`--sort`, `--all-methods`). The table output stays the default.
+
+This would help tools that check route coverage or generate API docs.
+```
+
+### Validate blueprint url_prefix starts with a slash
+
+```text
+Registering a blueprint with a `url_prefix` that has no leading slash, for example `app.register_blueprint(bp, url_prefix="api")`, produces routes that do not match what the user expects, and the mistake is silent.
+
+Flask should either add the missing leading slash or raise a clear `ValueError` explaining that `url_prefix` must start with `/`.
+
+Please also add a test and a note in the blueprints docs.
+```
+
 A prism splits one beam into its parts. **Prism** takes one GitHub issue and shows three sides before a coding worker starts: **scope** (the existing files likely to change), **usage** (predicted tokens), and **cost** (a USD estimate followed by a budget-rule allocation). It provides automated estimation and allocation; it does not implement the issue.
 
 ## Install
@@ -49,6 +83,8 @@ Each issue below has both Prism comments: the estimate with predicted files and 
 | Bhavya031/quart | [#1 App appends :5000 to the name of a socket file](https://github.com/Bhavya031/quart/issues/1) |
 | Bhavya031/k-2 | [#48 Trim surrounding whitespace in offline report search](https://github.com/Bhavya031/k-2/issues/48) |
 | Bhavya031/k-2 | [#47 Show document page numbers on offline report exceptions](https://github.com/Bhavya031/k-2/issues/47) |
+
+[Live CFO.ai budget dashboard](https://cfo.ai/s/7nP1l9E8l6ebolGG)
 
 The open-source forks already contain the upstream fixes, so these show the workflow end to end; the accuracy numbers come from the 15-issue benchmark above.
 
@@ -195,9 +231,9 @@ Prism is a Python CLI with example GitHub Actions workflows. An eligible issue o
 |---|---|
 | [Entire](https://entire.io/) | Provides the searchable mirror that names candidate files for live issues; Prism reads their contents from the pinned Git commit. |
 | [Anthropic](https://www.anthropic.com/) and [OpenAI](https://openai.com/) | Claude or OpenAI predicts likely files. Select one with `estimate.provider`; the shared portfolio config selects OpenAI. |
-| [Glance](https://github.com/Bhavya031/Glance) | Counts the exact starting context bytes that Prism assembles; it does not pick files or estimate the whole worker run. |
+| [Glance](https://github.com/Bhavya031/Glance) | Counts the exact starting context bytes that Prism assembles; it does not pick files or estimate the whole worker run. Built by us during the hackathon on 2026-10-10 alongside Prism, it ships [prebuilt binaries](https://github.com/Bhavya031/Glance/releases/latest) for macOS, Linux, and Windows (amd64 and arm64). |
 | [Neatlogs](https://neatlogs.com/) | Optional tracing for Prism's model workflow when `NEATLOGS_API_KEY` is set. It does not determine scope, usage, cost, or allocation. |
-| [CFO.ai](https://cfo.ai/) | Holds the saved budget rule and its decision test, budget, and request tables. Prism reads the rule's result, checks it, and records approved reservations through CFO.ai model tools. |
+| [CFO.ai](https://cfo.ai/) | Holds the saved budget rule and its decision test, budget, and request tables. Prism reads the rule's result, checks it, and records approved reservations through CFO.ai model tools. [Live CFO.ai budget dashboard](https://cfo.ai/s/7nP1l9E8l6ebolGG). |
 
 ## What appears on the issue
 
