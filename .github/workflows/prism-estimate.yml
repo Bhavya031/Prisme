@@ -9,6 +9,10 @@ on:
       config:
         required: false
         type: string
+      allow_anyone:
+        required: false
+        type: boolean
+        default: false
     secrets:
       ANTHROPIC_API_KEY:
         required: false
@@ -37,10 +41,11 @@ jobs:
     if: >-
       !github.event.issue.pull_request &&
       ((github.event_name == 'issues' &&
-        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association)) ||
+        github.event.issue.user.type != 'Bot' &&
+        (inputs.allow_anyone || contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association))) ||
        (github.event_name == 'issue_comment' && github.event.comment.user.type != 'Bot' &&
         github.event.comment.body == '/prism estimate' &&
-        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)))
+        (inputs.allow_anyone || contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))))
     runs-on: ubuntu-latest
     steps:
       - name: Acknowledge the request
@@ -58,10 +63,11 @@ jobs:
     if: >-
       !github.event.issue.pull_request &&
       ((github.event_name == 'issues' &&
-        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association)) ||
+        github.event.issue.user.type != 'Bot' &&
+        (inputs.allow_anyone || contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association))) ||
        (github.event_name == 'issue_comment' && github.event.comment.user.type != 'Bot' &&
         github.event.comment.body == '/prism estimate' &&
-        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)))
+        (inputs.allow_anyone || contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))))
     # Serialize all issues so the repository-wide reservation is visible before another gate runs.
     concurrency: prism-estimate
     runs-on: ubuntu-latest
@@ -127,7 +133,7 @@ jobs:
           fi
       - name: Check event, authorization, duplicates, and repository cooldown
         id: gate
-        run: prism issue-gate --event "$GITHUB_EVENT_PATH" --commit "${{ steps.source.outputs.commit }}" --cooldown-minutes "$(jq -r '.estimate.cooldown_minutes // 10' prism.json)" >> "$GITHUB_OUTPUT"
+        run: prism issue-gate --event "$GITHUB_EVENT_PATH" --commit "${{ steps.source.outputs.commit }}" --cooldown-minutes "$(jq -r '.estimate.cooldown_minutes // 10' prism.json)" ${{ inputs.allow_anyone && '--allow-anyone' || '' }} >> "$GITHUB_OUTPUT"
       - name: Report repository cooldown
         if: steps.gate.outputs.note != ''
         env:

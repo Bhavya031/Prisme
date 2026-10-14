@@ -140,6 +140,7 @@ def parser() -> argparse.ArgumentParser:
     gate.add_argument("--event", type=Path, required=True, help="GitHub webhook event JSON (GITHUB_EVENT_PATH)")
     gate.add_argument("--commit", help="resolved source commit for same-issue duplicate detection")
     gate.add_argument("--cooldown-minutes", type=int, default=10, help="repository estimate cooldown in minutes (default: 10)")
+    gate.add_argument("--allow-anyone", action="store_true", help="allow non-collaborator issue and comment authors")
     comment = commands.add_parser("issue-comment", help="issue bot: the markdown comment for a finished or failed run")
     comment.add_argument("--prediction", type=Path, help="`prism predict --format json` output, if it got that far")
     comment.add_argument("--estimate", type=Path, help="`prism solve-estimate` output, if it got that far")
@@ -355,7 +356,7 @@ def _issue(args) -> None:
             raise SystemExit("prism issue-gate: --cooldown-minutes must be nonnegative")
         try:
             note = bot.gate(_read_json(args.event), github_context.api_v2, commit=args.commit,
-                            cooldown_minutes=args.cooldown_minutes)
+                            cooldown_minutes=args.cooldown_minutes, allow_anyone=args.allow_anyone)
         except PermissionError as error:
             raise SystemExit(f"prism issue-gate: not running: {error}") from None
         print(f"note={note or ''}")

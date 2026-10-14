@@ -45,6 +45,29 @@ class BotTests(unittest.TestCase):
         pull["issue"]["pull_request"] = {}
         self.assertIsNotNone(bot.refusal(pull))
 
+    def test_public_opt_in_still_rejects_non_requests_and_bots(self):
+        for comment in (None, "/prism estimate"):
+            request = event(association="NONE", comment=comment)
+            self.assertIsNotNone(bot.refusal(request))
+            self.assertIsNone(bot.refusal(request, allow_anyone=True))
+            self.assertIsNone(bot.gate(request, lambda _: [], NOW, allow_anyone=True))
+            author = request["comment"] if comment else request["issue"]
+            author["user"] = {"type": "Bot"}
+            self.assertIsNotNone(bot.refusal(request, allow_anyone=True))
+        for request in (event(association="NONE", comment="/prism estimate again"),
+                        event(association="NONE", action="edited")):
+            self.assertIsNotNone(bot.refusal(request, allow_anyone=True))
+        pull = event(association="NONE")
+        pull["issue"]["pull_request"] = {}
+        self.assertIsNotNone(bot.refusal(pull, allow_anyone=True))
+
+    def test_reusable_workflow_public_input_is_opt_in_for_both_jobs(self):
+        workflow = (Path(__file__).parents[1] / ".github/workflows/prism-estimate.yml").read_text()
+        self.assertIn("allow_anyone:\n        required: false\n        type: boolean\n        default: false", workflow)
+        self.assertEqual(workflow.count("inputs.allow_anyone || contains"), 4)
+        self.assertEqual(workflow.count("github.event.issue.user.type != 'Bot'"), 2)
+        self.assertIn("inputs.allow_anyone && '--allow-anyone' || ''", workflow)
+
     def test_repository_limit_uses_only_bot_reservations_and_results(self):
         previous = {"user": {"login": "github-actions[bot]"}, "body": bot.MARKER + "\nEstimating",
                     "updated_at": "2026-10-11T03:55:00Z"}
@@ -278,6 +301,13 @@ class BotTests(unittest.TestCase):
             output = io.StringIO()
             with mock.patch.object(github_context, "api_v2", return_value=[]), redirect_stdout(output):
                 cli.main(["issue-gate", "--event", str(path)])
+            self.assertEqual(output.getvalue(), "note=\n")
+            path.write_text(json.dumps(event(association="NONE")))
+            with self.assertRaisesRegex(SystemExit, "not running"):
+                cli.main(["issue-gate", "--event", str(path)])
+            output = io.StringIO()
+            with mock.patch.object(github_context, "api_v2", return_value=[]), redirect_stdout(output):
+                cli.main(["issue-gate", "--event", str(path), "--allow-anyone"])
             self.assertEqual(output.getvalue(), "note=\n")
             output = io.StringIO()
             with redirect_stdout(output):
