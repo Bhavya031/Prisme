@@ -12,7 +12,15 @@
 
 Judges: [open a Flask issue](https://github.com/Bhavya031/flask/issues/new) with any title and body below; Prism replies with predicted files, tokens, USD cost, then a CFO.ai allocation in about 3 minutes. After editing, comment `/prism estimate` to re-run.
 
-### Warn at startup when SECRET_KEY is missing and sessions are used
+### Issue 1
+
+**Title**
+
+```text
+Warn at startup when SECRET_KEY is missing and sessions are used
+```
+
+**Body**
 
 ```text
 When `SECRET_KEY` is not set, using `session` fails only when a request tries to write to it, with "The session is unavailable because no secret key was set". This is easy to miss in development until a specific page is hit.
@@ -22,7 +30,15 @@ Flask could log a clear warning once at app startup (or on the first request) wh
 Expected: a one-time warning that names `SECRET_KEY` and links to the docs. No behaviour change otherwise.
 ```
 
-### Add --json output to flask routes
+### Issue 2
+
+**Title**
+
+```text
+Add --json output to flask routes
+```
+
+**Body**
 
 ```text
 `flask routes` prints a table that is easy to read but hard to use from scripts.
@@ -32,7 +48,15 @@ Please add a `--json` option that prints each rule as a JSON object with `endpoi
 This would help tools that check route coverage or generate API docs.
 ```
 
-### Validate blueprint url_prefix starts with a slash
+### Issue 3
+
+**Title**
+
+```text
+Validate blueprint url_prefix starts with a slash
+```
+
+**Body**
 
 ```text
 Registering a blueprint with a `url_prefix` that has no leading slash, for example `app.register_blueprint(bp, url_prefix="api")`, produces routes that do not match what the user expects, and the mistake is silent.
